@@ -45,38 +45,42 @@ El paquete `ETCCDI_precipitacion` contiene **dos módulos principales**:
 
 Para los ejemplos de procesamiento y graficamiento. 
 
-Los datos se pueden descargar de [Google Drive](https://drive.google.com/drive/folders/1zQotdaKFL3T5ik-g8XgVgNiNfvbWxYvJ?usp=drive_link)
+<!-- Los datos se pueden descargar de [Google Drive](https://drive.google.com/drive/folders/1zQotdaKFL3T5ik-g8XgVgNiNfvbWxYvJ?usp=drive_link)-->
 
 <br><br>
 # Procesamiento de datos -
     
 ## Malla
-- Frecuencia [Ejemplos](Indices_frecuencia_malla.ipynb) 
-- Duración [Ejemplos](Indices_duracion_malla.ipynb) 
-- Percentiles [Ejemplos](Indices_percentiles_malla.ipynb)
+- Frecuencia <!--[Ejemplos](Indices_frecuencia_malla.ipynb)-->
+- Absolutos 
+- Duración <!--[Ejemplos](Indices_duracion_malla.ipynb) -->
+- Percentiles <!--[Ejemplos](Indices_percentiles_malla.ipynb) -->
 
   
 ## In Situ
-- Frecuencia [Ejemplos](Indices_frecuencia_in_situ.ipynb) 
-- Duración [Ejemplos](Indices_duracion_in_situ.ipynb) 
-- Percentiles [Ejemplos](Indices_percentiles_in_situ.ipynb)
+- Frecuencia <!--[Ejemplos](Indices_frecuencia_in_situ.ipynb) -->
+- Duración <!--[Ejemplos](Indices_duracion_in_situ.ipynb) -->
+- Absolutos
+- Percentiles <!--[Ejemplos](Indices_percentiles_in_situ.ipynb) -->
 
 
 <br><br>
 # Graficamiento de datos -
  Malla
-- Frecuencia [Ejemplos](Indices_frecuencia_ploteo_malla.ipynb) 
-- Duración [Ejemplos](Indices_Duracion_ploteo_malla.ipynb)  
-- Percentiles [Ejemplos](Indices_percentiles_ploteo_malla.ipynb)
+- Frecuencia <!--[Ejemplos](Indices_frecuencia_ploteo_malla.ipynb) -->
+- Absolutos
+- Duración <!--[Ejemplos](Indices_Duracion_ploteo_malla.ipynb) --> 
+- Percentiles <!--[Ejemplos](Indices_percentiles_ploteo_malla.ipynb) -->
       
 # In Situ
-- Frecuencia [Ejemplos](Indices_frecuencia_ploteo_in_situ.ipynb) 
-- Duración [Ejemplos](Indices_duracion_ploteo_in_situ.ipynb)
-- Percentiles [Ejemplos](Indices_percentiles_ploteo_in_situ.ipynb)
+- Frecuencia <!--[Ejemplos](Indices_frecuencia_ploteo_in_situ.ipynb) -->
+- Absolutos
+- Duración <!--[Ejemplos](Indices_duracion_ploteo_in_situ.ipynb) -->
+- Percentiles <!--[Ejemplos](Indices_percentiles_ploteo_in_situ.ipynb) -->
 
 
 
 <br><br>
-# Replicar cuadernos de Jupyter de los ejemplos -
+<!--# Replicar cuadernos de Jupyter de los ejemplos -
 
-[Pasos](Pasos_replicar_ejemplos.md)
+[Pasos](Pasos_replicar_ejemplos.md) -->
