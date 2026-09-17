@@ -14,7 +14,8 @@ Paquete en Python para calcular y graficar índices climáticos de precipitació
 
 
 # Tutorial
-Aquí encontrarás la definición de los índices y ejemplos de cuadernos de Jupyter. # <!--[Enlace](ejemplos/Indice.md) -->
+Aquí encontrarás la definición de los índices y ejemplos de cuadernos de Jupyter. 
+<!--[Enlace](ejemplos/Indice.md) -->
 <br><br>
 
 
