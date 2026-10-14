@@ -12,7 +12,7 @@ Estos índices se dividen en las siguientes categorías principales:
 |**Absolutos**|**Rx1day**| Máx. precipitación en 1 día  | Precip. máxima mensual en 1 día | mm |
 |             |**Rx5day**| Máx. precipitación en 5 días | Precip. máxima mensual en 5 días | mm |
 |-----------|----|--------|------------|----------|
-|** Básicos **|**SDII**| Índice de intensidad diaria simple | Precip. total / días húmedos | mm/día |
+|**Básicos**|**SDII**| Índice de intensidad diaria simple | Precip. total / días húmedos | mm/día |
 |             |**PRCPTOT**| Precipitación total anual en días húmedos | Precip. total anual de días húmedos (≥ 1 mm)  | mm |
 |-----------|----|--------|------------|----------|
 |**Duración**|**CDD**| Días secos consecutivos |     Máx. número de días consecutivos cuando PR < 1 mm | días |
