@@ -472,7 +472,7 @@ class   ETCCDI_precip_in_situ:
                     Ejemplo: ETCCDI_in_situ.sdii(archivo_entrada: str, archivo_salida: str) 
 
         *** PRCPTOT    **** Precipitación total anual en días lluviosos (PR ≥ 1 mm) *** 
-                    Ejemplo: ETCCDI_in_situ.     (infile: str, output_file: str)
+                    Ejemplo: ETCCDI_in_situ.prcptot(archivo_entrada: str, archivo_salida: str)
 
         *** R95p    ** Días muy húmedos (días > Percentil 95th) ***
                     Periodo base actual: 1991 - 2020
@@ -527,21 +527,21 @@ class   ETCCDI_precip_in_situ:
 
         """
         
-        df = pd.read_csv(archivo_entrada, sep='\s+')  # Data import
+        df = pd.read_csv(archivo_entrada, sep=r'\s+')
 
+        years = sorted(df['Year'].unique())
         r10_lst = []
-        for y in df['Year'].unique():
+        year_lst = []
+
+        for y in years:
             year_data = df[df['Year'] == y]
-            r10 = (year_data['PR'] >= 10).sum()
-            r10_lst.append(r10)
-            
-        R10_out = np.array(r10_lst) 
+            # Solo días válidos (PR >= 0); -99.9 u otros negativos se ignoran
+            valid = year_data.loc[year_data['PR'] >= 0, 'PR']
+            r10 = (valid >= 10).sum()
+            r10_lst.append(int(r10))
+            year_lst.append(y)
 
-        dates_r10 = pd.date_range(start=str(df['Year'].min()), end=str(df['Year'].max() + 1), freq="YE")
-        df_out = pd.DataFrame({'Year': dates_r10.year, 'Indice_R10mm': R10_out})
-
-        # 3. Save the DataFrame to an Excel file (.xlsx)
-        # Set index=False to avoid writing the DataFrame index as an extra column in Excel
+        df_out = pd.DataFrame({'Year': year_lst, 'Indice_R10mm': r10_lst})
         df_out.to_excel(archivo_salida, index=False)
 
         print("***************************************")
@@ -575,28 +575,20 @@ class   ETCCDI_precip_in_situ:
 
         """
         
-        df = pd.read_csv(archivo_entrada, sep='\s+')  # Data import
+        df = pd.read_csv(archivo_entrada, sep=r'\s+')
 
+        years = sorted(df['Year'].unique())
         r20_lst = []
-        for y in df['Year'].unique():
-            df_year = df[df['Year'] == y]                   # ✅ Filtra por columna Year
-            if not df_year.empty:
-                     # Counting days of precipitation greater than or equal to 20 mm
-                    r20 = (df_year['PR'] >= 20).sum()
-                    r20_lst.append(r20)
-            else:
-                    r20 = float("NaN")
-                    r20_lst.append(r20)          
+        year_lst = []
 
+        for y in years:
+            df_year = df[df['Year'] == y]
+            valid = df_year.loc[df_year['PR'] >= 0, 'PR']
+            r20 = (valid >= 20).sum()
+            r20_lst.append(int(r20))
+            year_lst.append(y)
 
-        r20_out = np.array(r20_lst) 
-
-        dates_r20 = pd.date_range(start=str(df['Year'].min()), end=str(df['Year'].max() + 1), freq="YE")
-        df_out_r20 = pd.DataFrame({'Year': dates_r20.year, 'Indice_R20mm': r20_out} )
-
-
-        # 3. Save the DataFrame to an Excel file (.xlsx)
-        # Set index=False to avoid writing the DataFrame index as an extra column in Excel
+        df_out_r20 = pd.DataFrame({'Year': year_lst, 'Indice_R20mm': r20_lst})
         df_out_r20.to_excel(archivo_salida, index=False)
         
         print("**************************")        
@@ -630,34 +622,30 @@ class   ETCCDI_precip_in_situ:
         
         """
         
-        df = pd.read_csv(archivo_entrada, sep='\s+')  # Data import
-        rx1day_lst = []  # List to save index values per year
+        df = pd.read_csv(archivo_entrada, sep=r'\s+')
+        years = sorted(df['Year'].unique())
+        rx1day_lst = []
+        year_lst = []
+        month_lst = []
 
-        for y in df['Year'].unique():
-            df_year = df[df['Year'] == y]                   # ✅ Filtra por columna Year
-            if not df_year.empty:
-                for m in range(1, 13):
-                    df_month = df_year[df_year['Month'] == m]  # ✅ Filtra por columna Month
-                    if not df_month.empty:
-                        rx1day = df_month['PR'].max()          # ✅ Máximo de precipitación
-                        rx1day_lst.append(rx1day)
-                    else:
-                        rx1day_lst.append(float("NaN"))
-            else:
-                rx1day_lst.append(float("NaN"))
-                
-                
-        rx1day_out = np.array(rx1day_lst)        
+        for y in years:
+            df_year = df[df['Year'] == y]
+            for m in range(1, 13):
+                df_month = df_year[df_year['Month'] == m]
+                valid = df_month.loc[df_month['PR'] >= 0, 'PR']
+                if len(valid) > 0:
+                    rx1day = float(valid.max())
+                else:
+                    rx1day = np.nan
+                rx1day_lst.append(rx1day)
+                year_lst.append(y)
+                month_lst.append(m)
 
-
-        dates_rx1day = pd.date_range(start=str(df['Year'].min()), end=str(df['Year'].max() + 1), freq="ME")
-
-
-        df_out_rx1day = pd.DataFrame({'Year': dates_rx1day.year, 'Month': dates_rx1day.month, 'Indice_rx1daymm': rx1day_out})
-
-
-        # 3. Save the DataFrame to an Excel file (.xlsx)
-        # Set index=False to avoid writing the DataFrame index as an extra column in Excel
+        df_out_rx1day = pd.DataFrame({
+            'Year': year_lst,
+            'Month': month_lst,
+            'Indice_rx1daymm': rx1day_lst
+        })
         df_out_rx1day.to_excel(archivo_salida, index=False)
 
         print("**************************")        
@@ -692,43 +680,41 @@ class   ETCCDI_precip_in_situ:
         
         """
         
-        df = pd.read_csv(archivo_entrada, sep='\s+')  # Data import
-    
-        rx5day_lst = []  # List to save index values per year
+        df = pd.read_csv(archivo_entrada, sep=r'\s+')
+        df['Date'] = pd.to_datetime(df[['Year', 'Month', 'Day']])
+        df = df.sort_values('Date').reset_index(drop=True)
 
-        for y in df['Year'].unique():
+        years = sorted(df['Year'].unique())
+        rx5day_lst = []
+        year_lst = []
+        month_lst = []
+
+        for y in years:
             df_year = df[df['Year'] == y]
-            if not df_year.empty:
-                for m in range(1, 13):
-                    df_month = df_year[df_year['Month'] == m].reset_index(drop=True)  # reset para índices 0,1,2,...
-                    if not df_month.empty:
-                        consecutive_5_day_rr = []
-                        q = 0
-                        # Iterar mientras haya al menos 5 días desde la posición q
-                        while q <= len(df_month) - 5:
-                            rx5day_m = df_month['PR'].iloc[q:q+5].sum()  # suma de 5 días consecutivos
-                            consecutive_5_day_rr.append(rx5day_m)
-                            q += 1
-                        if consecutive_5_day_rr:
-                            rx5day_lst.append(round(max(consecutive_5_day_rr), 2))
-                        else:
-                            rx5day_lst.append(float("NaN"))
+            for m in range(1, 13):
+                df_month = df_year[df_year['Month'] == m].reset_index(drop=True)
+                if len(df_month) < 5:
+                    rx5day_lst.append(np.nan)
+                else:
+                    consecutive_5_day_rr = []
+                    pr = df_month['PR'].values
+                    for q in range(len(pr) - 4):
+                        window = pr[q:q+5]
+                        # Solo considerar la ventana si todos los valores son válidos (PR >= 0)
+                        if np.all(window >= 0):
+                            consecutive_5_day_rr.append(window.sum())
+                    if consecutive_5_day_rr:
+                        rx5day_lst.append(round(max(consecutive_5_day_rr), 2))
                     else:
-                        rx5day_lst.append(float("NaN"))  # ← también estaba mal (usaba rx1day_lst)
-            else:
-                rx5day_lst.append(float("NaN"))  # ← ídem
-                
-                
-        rx5day_out = np.array(rx5day_lst)        
-                
-        dates_rx5day = pd.date_range(start=str(df['Year'].min()), end=str(df['Year'].max() + 1), freq="ME")
-         
-                
-        df_out_rx5day = pd.DataFrame({'Year': dates_rx5day.year, 'Month': dates_rx5day.month,  'Indice_rx5daymm': rx5day_out})
+                        rx5day_lst.append(np.nan)
+                year_lst.append(y)
+                month_lst.append(m)
 
-
-        # 3. Save the DataFrame to an Excel file (.xlsx)
-        # Set index=False to avoid writing the DataFrame index as an extra column in Excel
+        df_out_rx5day = pd.DataFrame({
+            'Year': year_lst,
+            'Month': month_lst,
+            'Indice_rx5daymm': rx5day_lst
+        })
         df_out_rx5day.to_excel(archivo_salida, index=False)
 
         print("**************************")        
@@ -760,45 +746,45 @@ class   ETCCDI_precip_in_situ:
 
         archivo_salida: Ruta donde se guarda el archivo Excel (.xlsx)
     
+        Notas de implementación (alineado con ETCCDI / Climpact):
+        - Se recorre la serie diaria en orden cronológico real.
+        - PR < 1 mm  → día seco (incrementa la racha).
+        - PR >= 1 mm → día húmedo (rompe la racha).
+        - PR < 0 o NaN (p. ej. -99.9) → valor faltante (rompe la racha).
+        - El índice es el máximo de las rachas dentro del año.
         """        
         
-        df = pd.read_csv(archivo_entrada, sep='\s+')  # Data import
+        df = pd.read_csv(archivo_entrada, sep=r'\s+')
+        df['Date'] = pd.to_datetime(df[['Year', 'Month', 'Day']])
+        df = df.sort_values('Date').reset_index(drop=True)
 
-        cdd_lst = []  # List to save index values per year
+        years = sorted(df['Year'].unique())
+        cdd_lst = []
+        year_lst = []
 
-        for y in df['Year'].unique():
+        for y in years:
             df_year = df[df['Year'] == y]
-            if not df_year.empty:        
-                    # Yearly count of consecutive days with daily precipitation < 1 mm
-                    cdd_df = df_year[df_year['PR'] < 1].dropna().reset_index(drop=True)
-                    count = 0
-                    count_lst = []
-                    for q in range(1, len(cdd_df)):
-                        if (cdd_df['Day'].iloc[q] - cdd_df['Day'].iloc[q-1]) != 1:   # ← compara columna Day
-                            count = 0
-                        else:
-                            count = count + 1
-                        count_lst.append(count)
-                    if len(count_lst) == 0:  # Added in order to avoid error in finding the max() of an empty list
-                         pass
-                    else:
-                         cdd = max(count_lst) + 1
-                    cdd_lst.append(cdd)
-            else:
-                 cdd = float("NaN")
-                 cdd_lst.append(cdd)
-                
-                
-                
-        cdd_out = np.array(cdd_lst) 
+            if df_year.empty:
+                cdd_lst.append(np.nan)
+                year_lst.append(y)
+                continue
 
-        dates_cdd = pd.date_range(start=str(df['Year'].min()), end=str(df['Year'].max() + 1), freq="YE")
-        df_out_cdd = pd.DataFrame({'Year': dates_cdd.year, 'Indice_cdd': cdd_out} )   
+            max_streak = 0
+            current = 0
+            for pr in df_year['PR'].values:
+                if pd.isna(pr) or pr < 0:          # faltante → interrumpe
+                    current = 0
+                elif pr < 1.0:                     # día seco
+                    current += 1
+                    if current > max_streak:
+                        max_streak = current
+                else:                              # día húmedo (PR >= 1)
+                    current = 0
 
+            cdd_lst.append(int(max_streak))
+            year_lst.append(y)
 
-
-        ## 3. Save the DataFrame to an Excel file (.xlsx)
-        # Set index=False to avoid writing the DataFrame index as an extra column in Excel
+        df_out_cdd = pd.DataFrame({'Year': year_lst, 'Indice_cdd': cdd_lst})
         df_out_cdd.to_excel(archivo_salida, index=False)
 
         print("**************************")
@@ -830,42 +816,45 @@ class   ETCCDI_precip_in_situ:
    
         archivo_salida: Ruta donde se guarda el archivo Excel (.xlsx)
 
+        Notas de implementación (alineado con ETCCDI / Climpact):
+        - Se recorre la serie diaria en orden cronológico real.
+        - PR >= 1 mm → día húmedo (incrementa la racha).
+        - PR < 1 mm  → día seco (rompe la racha).
+        - PR < 0 o NaN (p. ej. -99.9) → valor faltante (rompe la racha).
+        - El índice es el máximo de las rachas dentro del año.
         """
         
-        cwd_lst = []  # List to save index values per year
-    
-        df = pd.read_csv(archivo_entrada, sep='\s+') # import
+        df = pd.read_csv(archivo_entrada, sep=r'\s+')
+        df['Date'] = pd.to_datetime(df[['Year', 'Month', 'Day']])
+        df = df.sort_values('Date').reset_index(drop=True)
 
-        for y in df['Year'].unique():
+        years = sorted(df['Year'].unique())
+        cwd_lst = []
+        year_lst = []
+
+        for y in years:
             df_year = df[df['Year'] == y]
-            if not df_year.empty:        
-                    # Yearly count of consecutive days with daily precipitation > 1 mm
-                    cwd_df = df_year[df_year['PR'] > 1].dropna().reset_index(drop=True)
-                    count = 0
-                    count_lst = []
-                    for q in range(1, len(cwd_df)):
-                        if (cwd_df['Day'].iloc[q] - cwd_df['Day'].iloc[q-1]) != 1:   # ← compara columna Day
-                            count = 0
-                        else:
-                            count = count + 1
-                        count_lst.append(count)
-                    if len(count_lst) == 0:  # Added in order to avoid error in finding the max() of an empty list
-                         pass
-                    else:
-                         cdd = max(count_lst) + 1
-                    cwd_lst.append(cdd)
-            else:
-                 cwd = float("NaN")
-                 cwd_lst.append(cwd)
-                
-        cwd_out = np.array(cwd_lst) 
+            if df_year.empty:
+                cwd_lst.append(np.nan)
+                year_lst.append(y)
+                continue
 
-        dates_cwd = pd.date_range(start=str(df['Year'].min()), end=str(df['Year'].max() + 1), freq="YE")
-        df_out_cwd = pd.DataFrame({'Year': dates_cwd.year, 'Indice_cwd': cwd_out} )   
+            max_streak = 0
+            current = 0
+            for pr in df_year['PR'].values:
+                if pd.isna(pr) or pr < 0:          # faltante → interrumpe
+                    current = 0
+                elif pr >= 1.0:                    # día húmedo
+                    current += 1
+                    if current > max_streak:
+                        max_streak = current
+                else:                              # día seco (PR < 1)
+                    current = 0
 
+            cwd_lst.append(int(max_streak))
+            year_lst.append(y)
 
-        ## 3. Save the DataFrame to an Excel file (.xlsx)
-        # Set index=False to avoid writing the DataFrame index as an extra column in Excel
+        df_out_cwd = pd.DataFrame({'Year': year_lst, 'Indice_cwd': cwd_lst})
         df_out_cwd.to_excel(archivo_salida, index=False)
         
         print("**************************")
@@ -901,31 +890,24 @@ class   ETCCDI_precip_in_situ:
                     
         """
         
-        sdii_lst = []  # List to save index values per year
-        df = pd.read_csv(archivo_entrada, sep='\s+') # import
+        df = pd.read_csv(archivo_entrada, sep=r'\s+')
+        years = sorted(df['Year'].unique())
+        sdii_lst = []
+        year_lst = []
 
-        for y in df['Year'].unique():
+        for y in years:
             df_year = df[df['Year'] == y]
-            if not df_year.empty:        
-                    wet_days_df = df_year[df_year['PR'] >= 1].dropna()  # Days with daily precipitation >= 1 mm        
-                    annual_precip = wet_days_df['PR'].sum()  # Calculates the sum of precipitation in wet days
-                    wet_days = len(df_year[df_year['PR'] >= 1].dropna())
-                    sdii = annual_precip / wet_days
-                    sdii_lst.append(round(sdii, 2))
+            wet = df_year.loc[(df_year['PR'] >= 1.0) & (df_year['PR'] >= 0), 'PR']
+            wet_days = len(wet)
+            if wet_days > 0:
+                annual_precip = wet.sum()
+                sdii = round(annual_precip / wet_days, 2)
             else:
-                sdii = float("NaN")
-                sdii_lst.append(sdii)
+                sdii = np.nan
+            sdii_lst.append(sdii)
+            year_lst.append(y)
 
-                    
-
-        sdii_out = np.array(sdii_lst) 
-
-        dates_sdii = pd.date_range(start=str(df['Year'].min()), end=str(df['Year'].max() + 1), freq="YE")
-        df_out_sdii = pd.DataFrame({'Year': dates_sdii.year, 'Indice_sdii': sdii_out} )        
-                
-               
-        ## 3. Save the DataFrame to an Excel file (.xlsx)
-        # Set index=False to avoid writing the DataFrame index as an extra column in Excel
+        df_out_sdii = pd.DataFrame({'Year': year_lst, 'Indice_sdii': sdii_lst})
         df_out_sdii.to_excel(archivo_salida, index=False)
         
         print("**************************")        
@@ -957,30 +939,22 @@ class   ETCCDI_precip_in_situ:
         
         archivo_salida: Ruta donde se guarda el archivo Excel (.xlsx)
 
-"""
+        """
 
-        prcptot_lst = []  # List to save index values per year
-        df = pd.read_csv(archivo_entrada, sep='\s+') # import
-        
-        
-        for y in df['Year'].unique():
+        df = pd.read_csv(archivo_entrada, sep=r'\s+')
+        years = sorted(df['Year'].unique())
+        prcptot_lst = []
+        year_lst = []
+
+        for y in years:
             df_year = df[df['Year'] == y]
-            if not df_year.empty:      
-                wet_days_df = df_year[df_year >= 1].dropna()  # Days with daily precipitation >= 1 mm
-                prcptot = wet_days_df['PR'].sum()  # Calculates the sum of precipitation in wet days
-                prcptot_lst.append(round(prcptot, 2))
-            else:
-                prcptot = float("NaN")
-                prcptot_lst.append(prcptot)
+            # Solo días válidos y húmedos (PR >= 1)
+            wet = df_year.loc[(df_year['PR'] >= 1.0) & (df_year['PR'] >= 0), 'PR']
+            prcptot = round(wet.sum(), 2) if len(wet) > 0 else 0.0
+            prcptot_lst.append(prcptot)
+            year_lst.append(y)
 
-
-        prcptot_out = np.array(prcptot_lst) 
-
-        dates_prcptot = pd.date_range(start=str(df['Year'].min()), end=str(df['Year'].max() + 1), freq="YE")
-        df_out_prcptot = pd.DataFrame({'Year': dates_prcptot.year, 'Indice_prcptot': prcptot_out} )   
-
-## 3. Save the DataFrame to an Excel file (.xlsx)
-# Set index=False to avoid writing the DataFrame index as an extra column in Excel
+        df_out_prcptot = pd.DataFrame({'Year': year_lst, 'Indice_prcptot': prcptot_lst})
         df_out_prcptot.to_excel(archivo_salida, index=False)
         
         print("**************************")   
@@ -1396,4 +1370,3 @@ class   ETCCDI_precip_in_situ:
         print("**************************")   
         print(f"\n ✅ Índice R99p ejecutado exitosamente. Archivo guardado: {archivo_salida}")
         print("**************************")   
-        
