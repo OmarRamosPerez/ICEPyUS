@@ -5,13 +5,7 @@ Created on Tue May 19 12:32:37 2026
 
 @author: omar
 
-Código corregido para coincidir con Climpact (paquete zyp en R):
-- Intercepto Theil-Sen: método joint  median(y - slope * x)
-- IC de la pendiente: fórmula de Sen (1968) con round() como confint.zyp
-- Bandas de confianza centradas en el mismo intercepto
-- -99 / -99.9 tratados como NaN (años/meses incompletos)
-- Unidades correctas en títulos según el índice
-- Corrección de bug en calcular_tendencia_punto (variable p_value)
+
 """
 
 import numpy as np
@@ -806,4 +800,3 @@ class ETCCDI_plot_Malla:
         guardar_resultados(lats, lons, tau_map, pval_map, pend_map,
                            pend_lower_map, pend_upper_map,
                            sig_map, tend_map, nombre_var, archivo_salida=OUTPUT_NC)
-
