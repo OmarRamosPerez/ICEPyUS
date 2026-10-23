@@ -7,7 +7,7 @@ with open('README.md', 'r', encoding='utf-8') as fh:
 
 setuptools.setup(
     name='icepyus',
-    version='1.6',
+    version='2.0',
     author='Omar Ramos Perez',
     author_email='omar.ramos@unison.mx',
     description='Calculo y graficacion de Indices Climaticos ETCCDI.',
