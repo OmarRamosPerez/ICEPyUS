@@ -185,12 +185,13 @@ class ETCCDI_precip_malla:
             )
             # Corregir metadatos heredados del PR diario (units mm/day → mm)
             # y alinear nombre/long_name con la salida de xclim (PRCPTOT_ETCCDI).
-            varname = cdo.showname(input=f_tmp)[0].strip()
-            # Un solo argumento de atributos (sintaxis CDO). La coma debe ir
-            # DENTRO del string de atributos, no como separador de argumentos Python.
+            # CDO aplica operadores de derecha a izquierda: primero chname, luego setattribute.
+            # Por eso los atributos se asignan al nombre NUEVO (índice), no al del archivo de entrada.
+            old_name = cdo.showname(input=f_tmp)[0].strip()
+            out_name = "PRCPTOT_ETCCDI"
             cdo.setattribute(
-                f'{varname}@units=mm,{varname}@long_name=Precipitación total en días húmedos (RR>=1 mm)',
-                input=f"-chname,{varname},PRCPTOT_ETCCDI {f_tmp}",
+                f'{out_name}@units=mm,{out_name}@long_name="Total wet-day (PR>=1 mm) precipitation"',
+                input=f"-chname,{old_name},{out_name} {f_tmp}",
                 output=archivo_salida,
             )
         _aviso("PRCPTOT", archivo_salida)
@@ -208,10 +209,13 @@ class ETCCDI_precip_malla:
             cdo.yearsum(input=f"-mul {archivo_entrada} -gec,1 {archivo_entrada}", output=f_tot)
             cdo.etccdi_r1mm("freq=year", input=archivo_entrada, output=f_n)
             cdo.div(input=f"{f_tot} {f_n}", output=f_raw)  # 0 días húmedos -> faltante
-            varname = cdo.showname(input=f_raw)[0].strip()
+            # CDO aplica operadores de derecha a izquierda: primero chname, luego setattribute.
+            # Por eso los atributos se asignan al nombre NUEVO (índice), no al del archivo de entrada.
+            old_name = cdo.showname(input=f_raw)[0].strip()
+            out_name = "SDII_ETCCDI"
             cdo.setattribute(
-                f'{varname}@units=mm/day,{varname}@long_name=Simple Daily Intensity Index (PRCPTOT/R1mm)',
-                input=f"-chname,{varname},SDII_ETCCDI {f_raw}",
+                f'{out_name}@units=mm/day,{out_name}@long_name="Simple Daily Intensity Index (PRCPTOT/R1mm)"',
+                input=f"-chname,{old_name},{out_name} {f_raw}",
                 output=archivo_salida,
             )
         _aviso("SDII", archivo_salida)
@@ -278,7 +282,7 @@ class ETCCDI_precip_malla:
             )
             vv[:] = thr_vals
             vv.long_name = (
-                f"Percentil {pct} de precipitación en días húmedos (PR>=1 mm)"
+                f"Percentile {pct} of wet-day (PR>=1 mm) precipitation"
             )
             vv.units = units
 
@@ -323,15 +327,24 @@ class ETCCDI_precip_malla:
             # (cdo yearsum puede devolver 0; xclim deja NaN)
             cdo.ifthen(input=f"{f_thr} {f_tmp}", output=f_masked)
 
-            varname = cdo.showname(input=f_masked)[0].strip()
+            # CDO aplica operadores de derecha a izquierda: primero chname, luego setattribute.
+            # Por eso los atributos se asignan al nombre NUEVO (índice), no al del archivo de entrada.
+            old_name = cdo.showname(input=f_masked)[0].strip()
             out_name = f"R{pct}P_ETCCDI"
-            long_name = (
-                f"Precipitación en días > P{pct} de días húmedos "
-                f"{base_inicio}-{base_fin}"
-            )
+            # long_name alineado con convención ETCCDI / Climpact
+            # R95p → Very wet days  (Total precipitation from days > 95th percentile)
+            # R99p → Extremely wet days  (Total precipitation from days > 99th percentile)
+            if pct == 95:
+                long_name = "Very wet days"
+            elif pct == 99:
+                long_name = "Extremely wet days"
+            else:
+                long_name = (
+                    f"Total precipitation from days > {pct}th percentile"
+                )
             cdo.setattribute(
-                f'{varname}@units=mm,{varname}@long_name="{long_name}"',
-                input=f"-chname,{varname},{out_name} {f_masked}",
+                f'{out_name}@units=mm,{out_name}@long_name="{long_name}"',
+                input=f"-chname,{old_name},{out_name} {f_masked}",
                 output=archivo_salida,
             )
         _aviso(nombre, archivo_salida)
