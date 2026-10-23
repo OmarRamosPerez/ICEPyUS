@@ -43,399 +43,311 @@ def _remove_files(*paths: str) -> None:
             pass
 
 
+# ---------------------------------------------------------------------------
+# Utilidades para series ESTACIONALES (p. ej. solo JJAS)
+# ---------------------------------------------------------------------------
+
+
+def _anios(archivo: str) -> list:
+    """Lista de años presentes en el archivo."""
+    return [int(a) for a in cdo.showyear(input=archivo)[0].split()]
+
+
+def _hay_huecos(archivo: str) -> bool:
+    """True si la serie diaria no es continua (p. ej. solo faltan oct-may)."""
+    fechas = pd.to_datetime(cdo.showtimestamp(input=archivo)[0].split())
+    return bool((pd.Series(fechas).diff().dt.days > 1).any())
+
+
+def _por_anio(operador: str, archivo_entrada: str, archivo_salida: str,
+              tmp_dir: str | None = None, prefiltro: str = "") -> str:
+    """
+    Aplica un operador de CDO año por año y junta los resultados con mergetime.
+
+    Motivo: operadores como etccdi_cdd / etccdi_cwd / etccdi_rx5day procesan la serie
+    como continua. Si el archivo solo trae una temporada (JJAS), una racha seca abierta
+    el 30-sep se arrastra al 1-jun del año siguiente y las ventanas de 5 días cruzan el
+    hueco oct-may. Calculando cada año por separado el estado se reinicia.
+    """
+    with tempfile.TemporaryDirectory(dir=tmp_dir) as tmp:
+        salidas = []
+        for y in _anios(archivo_entrada):
+            f_in = os.path.join(tmp, f"in_{y}.nc")
+            f_out = os.path.join(tmp, f"out_{y}.nc")
+            cdo.selyear(str(y), input=archivo_entrada, output=f_in)
+            getattr(cdo, operador)(input=f"{prefiltro} {f_in}".strip(), output=f_out)
+            salidas.append(f_out)
+        cdo.mergetime(input=" ".join(salidas), output=archivo_salida)
+    return archivo_salida
+
+
+def _aviso(nombre: str, archivo_salida: str) -> None:
+    print("*****************************************")
+    print(f"✅ Índice {nombre} ejecutado exitosamente. Archivo guardado: {archivo_salida}")
+    print("*****************************************")
+
+
 class ETCCDI_precip_malla:
     """
     Módulo para calcular índices climáticos ETCCDI en datos NetCDF (malla).
     PR = Precipitación diaria en mm.
-    
+
+    Funciona con series anuales completas y con series ESTACIONALES (p. ej. solo JJAS):
+    los índices que dependen de la continuidad temporal (CDD, CWD, Rx5day) se calculan
+    año por año, y los de conteo/suma usan explícitamente frecuencia anual.
+
     Índices de precipitación soportados:
-        
-        *** ID      ** Nombre Indicador   ***             
-        
-        *** R10mm   ** Número de días con precipitaciones intensas (PR ≥ 10 mm) ***                  
-                    Ejemplo: ETCCDI_malla.r10mm_malla(infile: str, output_file: str)
-        
-        *** R20mm   ** Número de días con precipitaciones muy intensas (PR es ≥ 20 mm) ***                
-                    Ejemplo: ETCCDI_malla.r20mm(infile: str, output_file: str)
-        
-        *** Rx1day  ** Precipitación máxima en un día ***  
-                    Ejemplo: ETCCDI_malla.rx1day(infile: str, output_file: str)
-                        
-        *** Rx5day  ** Precipitación máxima en 5 días ***    
-                    Ejemplo: ETCCDI_malla.rx5day(infile: str, output_file: str) 
-                        
+
+        *** R1mm    ** Número de días húmedos (PR ≥ 1 mm) ***
+        *** R10mm   ** Número de días con precipitaciones intensas (PR ≥ 10 mm) ***
+        *** R20mm   ** Número de días con precipitaciones muy intensas (PR ≥ 20 mm) ***
+        *** Rx1day  ** Precipitación máxima en un día ***
+        *** Rx5day  ** Precipitación máxima en 5 días ***
         *** CDD     ** Días secos (PR < 1 mm) consecutivos ***
-                    Ejemplo: ETCCDI_malla.cdd(infile: str, output_file: str)
-                        
-        *** CWD     ** Días húmedos (PR ≥ 1 mm) consecutivos ***   
-                    Ejemplo: ETCCDI_malla.cwd(infile: str, output_file: str)
-                        
-        *** SDII    ** Índice de intensidad diaria simple ***  
-                    Ejemplo: ETCCDI_malla.sdii(infile: str, output_file: str)
-
-        *** PRCPTOT    **** Precipitación total anual en días lluviosos (PR ≥ 1 mm) *** 
-                    Ejemplo: ETCCDI_malla.prcptot(infile: str, output_file: str)
-
-        *** R95p    ** Días muy húmedos (días > Percentil 95th) ***
+        *** CWD     ** Días húmedos (PR ≥ 1 mm) consecutivos ***
+        *** SDII    ** Índice de intensidad diaria simple ***
+        *** PRCPTOT ** Precipitación total en días lluviosos (PR ≥ 1 mm) ***
+        *** R95p    ** Precipitación en días > percentil 95 de los días húmedos del periodo base ***
+        *** R99p    ** Precipitación en días > percentil 99 de los días húmedos del periodo base ***
                     Periodo base actual: 1991 - 2020
-                    Periodos anteriores: 1961 - 1990
-                                         1981 - 2010
-                    Ejemplo: ETCCDI_malla.r95p(input_file, output_file, base_start, base_end)
-    
-    
-        *** Cada función tiene su descripción ***
+                    Periodos anteriores: 1961 - 1990 / 1981 - 2010
+                    Ejemplo: ETCCDI_precip_malla.r99p(entrada, salida, 1981, 2010)
 
         Índices climáticos según la definición de http://etccdi.pacificclimate.org/list_27_indices.shtml
-        
+
         Autor(es): Omar Ramos Pérez
         Facultad Interdisciplinaria de Ciencias Exactas y Naturales - Departamento de Física - Universidad de Sonora
-        
     """
+
+    def r1mm(archivo_entrada: str, archivo_salida: str):
+        """R1mm: recuento anual de días con PR ≥ 1 mm. Unidades: días.
+        Se pasa freq=year (ver nota en r10mm)."""
+        cdo.etccdi_r1mm("freq=year", input=archivo_entrada, output=archivo_salida)
+        _aviso("R1mm", archivo_salida)
 
     def r10mm(archivo_entrada: str, archivo_salida: str):
-        """ Esta función calcula el Índice ETCCDI R10 para un archivo netcdf
-        
-        Índice climático:   R10 [Número de días con precipitaciones intensas]
-        Definición:         Recuento anual de días en los que PR es ≥ 10 mm
-        Unidades:           días
-        
-        archivo_entrada:    Ruta del archivo netcdf
-        archivo_salida:     Ruta donde se guardará el archivo NetCDF con el índice correspondiente.         
-                    
-        """
-    
-        cdo.etccdi_r10mm(input=archivo_entrada, output=archivo_salida)
-        print("*****************************************")
-        print(f"✅ Índice R10mm ejecutado exitosamente. Archivo guardado: {archivo_salida}")
-        print("*****************************************")
+        """R10mm: recuento anual de días con PR ≥ 10 mm. Unidades: días.
 
+        Se pasa freq=year: sin ese parámetro CDO devuelve UN solo paso de tiempo con el
+        conteo de toda la serie (1981-2025 juntos) en lugar de un valor por año."""
+        cdo.etccdi_r10mm("freq=year", input=archivo_entrada, output=archivo_salida)
+        _aviso("R10mm", archivo_salida)
 
     def r20mm(archivo_entrada: str, archivo_salida: str):
-        """ Esta función calcula el índice ETCCDI R20 para un archivo netcdf
-        
-        Índice climático:   R20 [Número de días con precipitaciones muy intensas]
-        Definición:         Recuento anual de días en los que PR es ≥ 20 mm
-        Unidades:           días
-
-        archivo_entrada:    Ruta del archivo netcdf
-        archivo_salida:     Ruta donde se guardará el archivo NetCDF con el índice correspondiente.         
- 
-        """
-        
-        cdo.etccdi_r20mm(input=archivo_entrada, output=archivo_salida)
-        print("*****************************************")
-        print(f"✅ Índice R20mm ejecutado exitosamente. Archivo guardado: {archivo_salida}")
-        print("*****************************************")
-
+        """R20mm: recuento anual de días con PR ≥ 20 mm. Unidades: días.
+        Se pasa freq=year (ver nota en r10mm)."""
+        cdo.etccdi_r20mm("freq=year", input=archivo_entrada, output=archivo_salida)
+        _aviso("R20mm", archivo_salida)
 
     def rx1day(archivo_entrada: str, archivo_salida: str):
-        """ Esta función calcula el índice ETCCDI RX1day para un archivo netcdf
-        
-        Índice climático:   RX1day [Precipitación máxima en un día]
-        Definición:         Precipitación máxima mensual en un día.
-        Unidades:           mm    
-
-        archivo_entrada:    Ruta del archivo netcdf
-        archivo_salida:     Ruta donde se guardará el archivo NetCDF con el índice correspondiente.         
- 
-        """
+        """Rx1day: precipitación máxima en un día por año. Unidades: mm.
+        No depende de la continuidad de la serie."""
         cdo.etccdi_rx1day(input=archivo_entrada, output=archivo_salida)
-        print("*****************************************")
-        print(f"✅ Índice RX1day ejecutado exitosamente. Archivo guardado: {archivo_salida}")
-        print("*****************************************")
+        _aviso("RX1day", archivo_salida)
 
+    def rx5day(archivo_entrada: str, archivo_salida: str, tmp_dir: str | None = None):
+        """Rx5day: precipitación máxima en 5 días consecutivos por año. Unidades: mm.
+        Se calcula año por año para que ninguna ventana cruce el hueco entre temporadas.
 
-    def rx5day(archivo_entrada: str, archivo_salida: str):
-        """ Esta función calcula el índice ETCCDI RX5day para un archivo netcdf
-        
-        Índice climático:   RX5day [Precipitación máxima en 5 días].
-        Definición:         Precipitación máxima mensual en 5 días
-        Unidades:           mm
-
-        archivo_entrada:    Ruta del archivo netcdf
-        archivo_salida:     Ruta donde se guardará el archivo NetCDF con el índice correspondiente.         
- 
-        """
-        
-        cdo.etccdi_rx5day(input=archivo_entrada, output=archivo_salida)
-        print("*****************************************")
-        print(f"✅ Índice RX5day ejecutado exitosamente. Archivo guardado: {archivo_salida}")
-        print("*****************************************")
-
-
-    def cdd(archivo_entrada: str, archivo_salida: str):
-        """ Esta función calcula el índice ETCCDI CDD para un archivo netcdf
-        
-        Índice climático:   CDD [Días secos consecutivos]
-        Definición:         Número máximo de días consecutivos en los que PR < 1 mm 
-        Unidades:           días
-
-        archivo_entrada:    Ruta del archivo netcdf
-        archivo_salida:     Ruta donde se guardará el archivo NetCDF con el índice correspondiente.         
- 
-        """
-
-        cdo.etccdi_cdd(input=archivo_entrada, output=archivo_salida)
-        print("*****************************************")
-        print(f"✅ Índice CDD ejecutado exitosamente. Archivo guardado: {archivo_salida}")
-        print("*****************************************")
-
-        
-    def cwd(archivo_entrada: str, archivo_salida: str):
-        """ Esta función calcula el índice ETCCDI CWD para un archivo netcdf
-        
-        Índice climático:   CWD [Días húmedos consecutivos]
-        Definición:         Número máximo de días consecutivos en los que PR ≥ a 1 mm 
-        Unidades:           días
-
-        archivo_entrada:    Ruta del archivo netcdf
-        archivo_salida:     Ruta donde se guardará el archivo NetCDF con el índice correspondiente.         
- 
-        """
-
-        cdo.etccdi_cwd(input=archivo_entrada, output=archivo_salida)
-        print("*****************************************")
-        print(f"✅ Índice CWD ejecutado exitosamente. Archivo guardado: {archivo_salida}")
-        print("*****************************************")
-
-
-    def sdii(archivo_entrada: str, archivo_salida: str):
-        """ Esta función calcula el índice ETCCDI SDII para un archivo netcdf
-        
-        Índice climático:   SDII [Índice de intensidad diaria simple]. 
-        Definición:         Se calcula dividiendo la precipitación total anual 
-                            entre el número de días con lluvia (PR ≥ 1 mm) en el año.         
-        Unidades:           mm/día
-
-        archivo_entrada:    Ruta del archivo netcdf
-        archivo_salida:     Ruta donde se guardará el archivo NetCDF con el índice correspondiente.         
-                 
-        """
-
-        cdo.etccdi_sdii(input=archivo_entrada, output=archivo_salida)
-        print("*****************************************")
-        print(f"✅ Índice SDII ejecutado exitosamente. Archivo guardado: {archivo_salida}")
-        print("*****************************************")
-
-
-    def prcptot(archivo_entrada: str, archivo_salida: str):
-        """ Esta función calcula el Indice ETCCDI PRCPTOT para un archivo netcdf
- 
-        Índice climático:   PRCPTOT [Precipitación total anual en días lluviosos]
-        Definición:         Precipitación total anual en días lluviosos (PR ≥ 1 mm).
-        Unidades:           mm    
-        
-        archivo_entrada:    Ruta del archivo netcdf
-        archivo_salida:     Ruta donde se guardará el archivo NetCDF con el índice correspondiente.         
- 
-        """
-# Paso 1: máscara de días húmedos (pr >= 1 mm/día) → archivo temporal
-        tmp_mask = "/tmp/mask_wet_days.nc"
-        cdo.gtc(1, input=archivo_entrada, output=tmp_mask)
-
-# Paso 2: multiplicar precipitación original por la máscara
-        tmp_mul = "/tmp/pr_wet_days.nc"
-        cdo.mul(input=f"{archivo_entrada} {tmp_mask}", output=tmp_mul)
-
-# Paso 3: suma anual → PRCPTOT
-        cdo.yearsum(input=tmp_mul, output=archivo_salida)
-        
-        print("*****************************************")
-        print(f"✅ Índice PRCPTOT calculado exitosamente. Archivo guardado:  {archivo_salida}")
-        print("*****************************************")
-
-
-
-
-    def r95p( archivo_entrada: str,
-    archivo_salida: str,
-    base_inicio: int ,
-    base_fin:   int ,
-    tmp_dir:    str | None = None,
-    ) -> str:
-        """
-    Calcula el índice ETCCDI R95p para un archivo netcdf
-    
-    Índice climático:   R95p [Días muy húmedos]
-    Definición:         Suma anual de precipitación en los días en que la precipitación supera
-                        el percentil 95 del período de referencia (solo días húmedos ≥ 1 mm).
-    Unidades:           mm
-
-        R95p = Σ RRij   donde  RRij > RR95p  y  RRij ≥ 1 mm
-
-    Parámetros
-    ----------
-    archivo_entrada : str        Archivo NetCDF de precipitación diaria (mm/día).
-    archivo_salida : str       Archivo NetCDF de salida con R95p anual.
-    base_start : int        Año inicio del período de referencia (p. ej.,   1981).
-    base_end : int          Año fin del período de referencia (p. ej., 2010).
-    tmp_dir : str | None    Directorio para temporales (None → carpeta del sistema).
-
-    """
+        IMPORTANTE: etccdi_rx5day de CDO espera como entrada los TOTALES de 5 días, no la
+        precipitación diaria. Si se le pasa PR diaria devuelve el máximo de un día (= Rx1day).
+        Por eso se aplica -runsum,5 antes del operador."""
         _validate_file(archivo_entrada)
-        tmp = tmp_dir or tempfile.gettempdir()
+        _por_anio("etccdi_rx5day", archivo_entrada, archivo_salida, tmp_dir,
+                  prefiltro="-runsum,5")
+        _aviso("RX5day", archivo_salida)
 
-        f_base   = os.path.join(tmp, "r95p_base.nc")
-        f_pct95  = os.path.join(tmp, "r95p_pct95.nc")
-        f_wet    = os.path.join(tmp, "r95p_wet.nc")
-        f_mask   = os.path.join(tmp, "r95p_mask.nc")
-        f_masked = os.path.join(tmp, "r95p_masked.nc")
-
-        try:
-            logger.info("R95p | Paso 1: Extrayendo período base %d–%d", base_inicio, base_fin)
-            cdo.selyear(
-            f"{base_inicio}/{base_fin}",
-            input=archivo_entrada,
-            output=f_base,
-            )
-
-            logger.info("R95p | Paso 2: Calculando percentil 95 estacional")
-            cdo.ydrunpctl(
-            "95,5",
-            input=f"{f_base} -ydrunmin,5 {f_base} -ydrunmax,5 {f_base}",
-            output=f_pct95,
-            )
-
-            logger.info("R95p | Paso 3: Máscara días húmedos (≥ 1 mm)")
-            cdo.gtc(
-            "1.0",
-            input=archivo_entrada,
-            output=f_wet,
-            )
-
-            logger.info("R95p | Paso 4: Máscara días > percentil 95")
-        # cdo sub resta el percentil (365 pasos) a cada día de la serie completa
-        # usando la lógica de día-del-año; luego gtc,0 devuelve 1 donde pr > pct95
-            f_sub95 = f_base.replace("r95p_base", "r95p_sub95")
-            cdo.ydaysub(
-            input=f"{archivo_entrada} {f_pct95}",
-            output=f_sub95,
-            )
-            cdo.gtc(
-            "0",
-            input=f_sub95,
-            output=f_mask,
-            )
-
-            logger.info("R95p | Paso 5: Precipitación filtrada (húmedo AND > pct95)")
-            cdo.mul(
-            input=f"{archivo_entrada} -mul {f_wet} {f_mask}",
-            output=f_masked,
-            )
-
-            logger.info("R95p | Paso 6: Suma anual → R95p")
-            cdo.yearsum(
-            input=f_masked,
-            output=archivo_salida,
-            )
-
- #           logger.info("✅ R95p calculado → %s", archivo_salida)
-            print("*****************************************")
-            print(f"✅ Índice R95P calculado exitosamente. Archivo guardado:  {archivo_salida}")
-            print("*****************************************")
-
-
-        finally:
-            _remove_files(f_base, f_pct95, f_wet, f_mask, f_masked,
-                      f_base.replace('r95p_base', 'r95p_sub95'))
-
-        return archivo_salida
-    
-
-    def r99p(
-    archivo_entrada: str,
-    archivo_salida: str,
-    base_inicio: int ,
-    base_fin:   int ,
-    tmp_dir:    str | None = None,
-    ) -> str:
-        """
-    Calcula el índice ETCCDI R99p para un archivo netcdf
-
-    Índice Climático:   R99p [Días extremadamente húmedos]
-    Definición:         Suma anual de precipitación en los días en que la precipitación supera
-                        el percentil 99 del período de referencia (solo días húmedos ≥ 1 mm).
-    Unidades:           mm
-    
-        R99p = Σ RRij   donde  RRij > RR99p  y  RRij ≥ 1 mm
-
-    Parámetros
-    ----------
-    input_file : str        Archivo NetCDF de precipitación diaria (mm/día).
-    output_file : str       Archivo NetCDF de salida con R99p anual.
-    base_start : int        Año inicio del período de referencia (default 1981).
-    base_end : int          Año fin del período de referencia (default 2010).
-    tmp_dir : str | None    Directorio para temporales (None → carpeta del sistema).
-
-    """
+    def cdd(archivo_entrada: str, archivo_salida: str, tmp_dir: str | None = None):
+        """CDD: máximo de días consecutivos con PR < 1 mm por año. Unidades: días.
+        Se calcula año por año (la racha NO se arrastra de un año al siguiente)."""
         _validate_file(archivo_entrada)
-        tmp = tmp_dir or tempfile.gettempdir()
+        _por_anio("etccdi_cdd", archivo_entrada, archivo_salida, tmp_dir)
+        _aviso("CDD", archivo_salida)
 
-        f_base   = os.path.join(tmp, "r99p_base.nc")
-        f_pct99  = os.path.join(tmp, "r99p_pct99.nc")
-        f_wet    = os.path.join(tmp, "r99p_wet.nc")
-        f_mask   = os.path.join(tmp, "r99p_mask.nc")
-        f_masked = os.path.join(tmp, "r99p_masked.nc")
+    def cwd(archivo_entrada: str, archivo_salida: str, tmp_dir: str | None = None):
+        """CWD: máximo de días consecutivos con PR ≥ 1 mm por año. Unidades: días.
+        Se calcula año por año (la racha NO se arrastra de un año al siguiente)."""
+        _validate_file(archivo_entrada)
+        _por_anio("etccdi_cwd", archivo_entrada, archivo_salida, tmp_dir)
+        _aviso("CWD", archivo_salida)
 
-        try:
-            logger.info("R99p | Paso 1: Extrayendo período base %d–%d", base_inicio, base_fin)
-            cdo.selyear(
-            f"{base_inicio}/{base_fin}",
-            input=archivo_entrada,
-            output=f_base,
-            )
+    def prcptot(archivo_entrada: str, archivo_salida: str, tmp_dir: str | None = None):
+        """PRCPTOT: precipitación anual en días lluviosos (PR ≥ 1 mm). Unidades: mm.
 
-            logger.info("R99p | Paso 2: Calculando percentil 99 estacional")
-            cdo.ydrunpctl(
-            "99,5",
-            input=f"{f_base} -ydrunmin,5 {f_base} -ydrunmax,5 {f_base}",
-            output=f_pct99,
-            )
-
-            logger.info("R99p | Paso 3: Máscara días húmedos (≥ 1 mm)")
-            cdo.gtc(
-            "1.0",
-            input=archivo_entrada,
-            output=f_wet,
-            )
-
-            logger.info("R99p | Paso 4: Máscara días > percentil 99")
-            f_sub99 = f_base.replace("r99p_base", "r99p_sub99")
-            cdo.ydaysub(
-            input=f"{archivo_entrada} {f_pct99}",
-            output=f_sub99,
-            )
-            cdo.gtc(
-            "0",
-            input=f_sub99,
-            output=f_mask,
-            )
-
-            logger.info("R99p | Paso 5: Precipitación filtrada (húmedo AND > pct99)")
-            cdo.mul(
-            input=f"{archivo_entrada} -mul {f_wet} {f_mask}",
-            output=f_masked,
-            )
-
-            logger.info("R99p | Paso 6: Suma anual → R99p")
+        Se usa gec (≥ 1) en vez de gtc (> 1) para respetar la definición."""
+        _validate_file(archivo_entrada)
+        with tempfile.TemporaryDirectory(dir=tmp_dir) as tmp:
+            f_tmp = os.path.join(tmp, "prcptot_raw.nc")
+            # yearsum( PR * (PR >= 1) )
             cdo.yearsum(
-            input=f_masked,
-            output=archivo_salida,
+                input=f"-mul {archivo_entrada} -gec,1 {archivo_entrada}",
+                output=f_tmp,
+            )
+            # Corregir metadatos heredados del PR diario (units mm/day → mm)
+            # y alinear nombre/long_name con la salida de xclim (PRCPTOT_ETCCDI).
+            varname = cdo.showname(input=f_tmp)[0].strip()
+            # Un solo argumento de atributos (sintaxis CDO). La coma debe ir
+            # DENTRO del string de atributos, no como separador de argumentos Python.
+            cdo.setattribute(
+                f'{varname}@units=mm,{varname}@long_name=Precipitación total en días húmedos (RR>=1 mm)',
+                input=f"-chname,{varname},PRCPTOT_ETCCDI {f_tmp}",
+                output=archivo_salida,
+            )
+        _aviso("PRCPTOT", archivo_salida)
+
+
+    def sdii(archivo_entrada: str, archivo_salida: str, tmp_dir: str | None = None):
+        """SDII: PRCPTOT / R1mm por año. Unidades: mm/día.
+        (etccdi_sdii de CDO devuelve un solo valor de toda la serie, por eso se arma
+        a partir de la suma anual y del número de días húmedos por año.)"""
+        _validate_file(archivo_entrada)
+        with tempfile.TemporaryDirectory(dir=tmp_dir) as tmp:
+            f_tot = os.path.join(tmp, "prcptot.nc")
+            f_n = os.path.join(tmp, "r1mm.nc")
+            f_raw = os.path.join(tmp, "sdii_raw.nc")
+            cdo.yearsum(input=f"-mul {archivo_entrada} -gec,1 {archivo_entrada}", output=f_tot)
+            cdo.etccdi_r1mm("freq=year", input=archivo_entrada, output=f_n)
+            cdo.div(input=f"{f_tot} {f_n}", output=f_raw)  # 0 días húmedos -> faltante
+            varname = cdo.showname(input=f_raw)[0].strip()
+            cdo.setattribute(
+                f'{varname}@units=mm/day,{varname}@long_name=Simple Daily Intensity Index (PRCPTOT/R1mm)',
+                input=f"-chname,{varname},SDII_ETCCDI {f_raw}",
+                output=archivo_salida,
+            )
+        _aviso("SDII", archivo_salida)
+
+    # -- percentiles ------------------------------------------------------------------
+    @staticmethod
+    def _umbral_percentil_humedos(archivo_base: str, archivo_umbral: str, pct: int) -> None:
+        """
+        Umbral = percentil `pct` de los días húmedos (PR ≥ 1 mm) del archivo base,
+        un valor por píxel. Usa numpy.nanquantile (método linear), igual que xclim,
+        en lugar de cdo timpctl (histograma que sesga la cola P95/P99).
+
+        Solo netCDF4 + numpy (sin xarray) para evitar el error
+        packaging.version.InvalidVersion: 'unknown' en entornos Anaconda/dask.
+        """
+        try:
+            from netCDF4 import Dataset
+        except ImportError as exc:
+            raise ImportError(
+                "R95p/R99p requieren netCDF4. Instala con: pip install netCDF4"
+            ) from exc
+
+        with Dataset(archivo_base, "r") as src:
+            # Variable de precipitación (excluir time_bnds y similares)
+            skip = {"time_bnds", "lat_bnds", "lon_bnds"}
+            pr_names = [
+                n for n, v in src.variables.items()
+                if n not in src.dimensions and n not in skip and len(v.dimensions) >= 1
+            ]
+            if not pr_names:
+                raise ValueError(f"No se encontró variable de precipitación en {archivo_base}")
+            pr_name = pr_names[0]
+            pr_var = src.variables[pr_name]
+            dims = pr_var.dimensions  # p. ej. ('time', 'lat', 'lon')
+            data = np.asarray(pr_var[:], dtype=np.float64)
+
+            # Coordenadas espaciales a copiar
+            spatial_dims = [d for d in dims if d != "time"]
+            coord_data = {}
+            for d in spatial_dims:
+                if d in src.variables:
+                    coord_data[d] = np.asarray(src.variables[d][:])
+                else:
+                    coord_data[d] = np.arange(src.dimensions[d].size)
+
+            units = getattr(pr_var, "units", "mm/day")
+
+        # Días secos o inválidos → NaN
+        data = np.where(np.isfinite(data) & (data >= 1.0), data, np.nan)
+
+        # Percentil a lo largo del tiempo (eje 0)
+        with np.errstate(all="ignore"):
+            thr_vals = np.nanquantile(data, pct / 100.0, axis=0).astype(np.float64)
+
+        # Escribir NetCDF solo espacial (CDO lo retransmite al hacer -gt)
+        with Dataset(archivo_umbral, "w", format="NETCDF4") as dst:
+            for d in spatial_dims:
+                dst.createDimension(d, coord_data[d].shape[0])
+                cv = dst.createVariable(d, coord_data[d].dtype, (d,))
+                cv[:] = coord_data[d]
+
+            vv = dst.createVariable(
+                pr_name, "f8", tuple(spatial_dims), fill_value=np.nan
+            )
+            vv[:] = thr_vals
+            vv.long_name = (
+                f"Percentil {pct} de precipitación en días húmedos (PR>=1 mm)"
+            )
+            vv.units = units
+
+    def _rXXp(nombre: str, pct: int, archivo_entrada: str, archivo_salida: str,
+              base_inicio: int, base_fin: int, tmp_dir: str | None = None) -> str:
+        """
+        Definición ETCCDI de precipitación muy/extremadamente húmeda:
+          1) umbral = UN percentil por píxel, calculado con los días HÚMEDOS (≥ 1 mm)
+             del periodo base (sin ventana móvil ni umbral por día del año);
+          2) índice anual = suma de PR en los días con PR > umbral.
+
+        El umbral se calcula con numpy.quantile (método linear), idéntico a xclim,
+        porque cdo timpctl usa un histograma que introduce sesgo en P95/P99.
+
+        Nota: no se aplica el bootstrap de Zhang et al. (2005) para los años dentro del
+        periodo base (igual que la configuración de xclim usada en la comparación).
+        """
+        _validate_file(archivo_entrada)
+        with tempfile.TemporaryDirectory(dir=tmp_dir) as tmp:
+            f_base = os.path.join(tmp, "base.nc")
+            f_thr = os.path.join(tmp, f"umbral_p{pct}.nc")
+            f_tmp = os.path.join(tmp, f"r{pct}_raw.nc")
+            f_masked = os.path.join(tmp, f"r{pct}_masked.nc")
+
+            logger.info("%s | Paso 1: periodo base %d–%d", nombre, base_inicio, base_fin)
+            cdo.selyear(f"{base_inicio}/{base_fin}", input=archivo_entrada, output=f_base)
+
+            logger.info(
+                "%s | Paso 2–3: percentil %d de días húmedos (≥ 1 mm)",
+                nombre,
+                pct,
+            )
+            ETCCDI_precip_malla._umbral_percentil_humedos(f_base, f_thr, pct)
+
+            logger.info("%s | Paso 4: suma anual de PR en días > umbral", nombre)
+            cdo.yearsum(
+                input=f"-mul {archivo_entrada} -gt {archivo_entrada} {f_thr}",
+                output=f_tmp,
             )
 
-        #logger.info("✅ R99p calculado → %s", output_file)
-        
-            print("*****************************************")
-            print(f"✅ Índice R99P calculado exitosamente. Archivo guardado:  {archivo_salida}")
-            print("*****************************************")
+            # Donde el umbral es faltante (sin días húmedos en el base) → NaN
+            # (cdo yearsum puede devolver 0; xclim deja NaN)
+            cdo.ifthen(input=f"{f_thr} {f_tmp}", output=f_masked)
 
-
-        finally:
-            _remove_files(f_base, f_pct99, f_wet, f_mask, f_masked,
-                      f_base.replace('r99p_base', 'r99p_sub99'))
-
+            varname = cdo.showname(input=f_masked)[0].strip()
+            out_name = f"R{pct}P_ETCCDI"
+            long_name = (
+                f"Precipitación en días > P{pct} de días húmedos "
+                f"{base_inicio}-{base_fin}"
+            )
+            cdo.setattribute(
+                f'{varname}@units=mm,{varname}@long_name="{long_name}"',
+                input=f"-chname,{varname},{out_name} {f_masked}",
+                output=archivo_salida,
+            )
+        _aviso(nombre, archivo_salida)
         return archivo_salida
 
+    def r95p(archivo_entrada: str, archivo_salida: str, base_inicio: int,
+             base_fin: int, tmp_dir: str | None = None) -> str:
+        """R95p: precipitación anual en días > P95 de los días húmedos del periodo base. Unidades: mm."""
+        return ETCCDI_precip_malla._rXXp("R95p", 95, archivo_entrada, archivo_salida,
+                                         base_inicio, base_fin, tmp_dir)
+
+    def r99p(archivo_entrada: str, archivo_salida: str, base_inicio: int,
+             base_fin: int, tmp_dir: str | None = None) -> str:
+        """R99p: precipitación anual en días > P99 de los días húmedos del periodo base. Unidades: mm."""
+        return ETCCDI_precip_malla._rXXp("R99p", 99, archivo_entrada, archivo_salida,
+                                         base_inicio, base_fin, tmp_dir)
 
 
 #/////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -723,65 +635,73 @@ class   ETCCDI_precip_in_situ:
                   
     
         
-    def cdd(archivo_entrada:str, archivo_salida:str):  
+    def cdd(archivo_entrada: str, archivo_salida: str, aplicar_criterio_climpact: bool = True):
         """
         Índice climático:   CDD [Días secos (PR < 1 mm) consecutivos]
         Definición:         Número máximo de días consecutivos con PR < 1 mm al año.
         Unidades:           Días
-           
-        archivo_entrada: Ruta del archivo .txt de la estación  
-                    
-        Formato del archivo de texto de la estación             
-        Columnas: Año, Mes, Día, PR, TX, TN 
-                                   
-                    1901    1          1          -99.9    -3.1      -6.8                   
-                    1901    1          2          -99.9    -1.3      -3.6
-                    1901    1          3          -99.9    -0.5      -7.9
-                    1901    1          4          -99.9    -1.0      -9.1
-                    1901    1          5          -99.9    -1.8      -8.4
-            
-        mes y día deben ser números enteros.
-        Las unidades de PR (Precipitación) son milímetros.
-        Las unidades de TX (Temperatura Máxima)/TN (Temperatura Mínima) son grados Celsius.
 
-        archivo_salida: Ruta donde se guarda el archivo Excel (.xlsx)
-    
+        archivo_entrada: Ruta del archivo .txt de la estación
+        archivo_salida:  Ruta donde se guarda el archivo Excel (.xlsx)
+
+        aplicar_criterio_climpact : bool
+            Si True (por defecto), aplica el criterio de completitud de Climpact:
+            - máximo 3 días faltantes por mes
+            - máximo 15 días faltantes por año
+            Si se supera → el año se marca como NaN (igual que Climpact).
+
         Notas de implementación (alineado con ETCCDI / Climpact):
-        - Se recorre la serie diaria en orden cronológico real.
+        - Se construye un calendario diario completo para cada año.
+        - Los días ausentes en el archivo se tratan como faltantes (-99.9).
         - PR < 1 mm  → día seco (incrementa la racha).
         - PR >= 1 mm → día húmedo (rompe la racha).
-        - PR < 0 o NaN (p. ej. -99.9) → valor faltante (rompe la racha).
-        - El índice es el máximo de las rachas dentro del año.
-        """        
-        
+        - PR < 0 o NaN → valor faltante (rompe la racha).
+        - El índice es el máximo de las rachas dentro del año calendario.
+        """
         df = pd.read_csv(archivo_entrada, sep=r'\s+')
         df['Date'] = pd.to_datetime(df[['Year', 'Month', 'Day']])
-        df = df.sort_values('Date').reset_index(drop=True)
+        df = df.set_index('Date').sort_index()
 
-        years = sorted(df['Year'].unique())
+        years = sorted(df.index.year.unique())
         cdd_lst = []
         year_lst = []
 
         for y in years:
-            df_year = df[df['Year'] == y]
-            if df_year.empty:
-                cdd_lst.append(np.nan)
-                year_lst.append(y)
-                continue
+            # Calendario completo del año
+            start = pd.Timestamp(year=y, month=1, day=1)
+            end   = pd.Timestamp(year=y, month=12, day=31)
+            full_idx = pd.date_range(start, end, freq='D')
 
+            # Reindexar: días ausentes → NaN (luego se tratan como faltantes)
+            s = df.loc[df.index.year == y, 'PR'].reindex(full_idx)
+
+            # Contar faltantes
+            missing_mask = s.isna() | (s < 0)
+            n_missing = int(missing_mask.sum())
+
+            # Criterio de completitud de Climpact
+            if aplicar_criterio_climpact:
+                # Faltantes por mes
+                monthly_missing = missing_mask.groupby(full_idx.month).sum()
+                if (monthly_missing > 3).any() or n_missing > 15:
+                    cdd_lst.append(np.nan)
+                    year_lst.append(y)
+                    continue
+
+            # Contar rachas de días secos
             max_streak = 0
             current = 0
-            for pr in df_year['PR'].values:
+            for pr in s.values:
                 if pd.isna(pr) or pr < 0:          # faltante → interrumpe
                     current = 0
                 elif pr < 1.0:                     # día seco
                     current += 1
                     if current > max_streak:
                         max_streak = current
-                else:                              # día húmedo (PR >= 1)
+                else:                              # día húmedo
                     current = 0
 
-            cdd_lst.append(int(max_streak))
+            cdd_lst.append(int(max_streak) if max_streak > 0 else 0)
             year_lst.append(y)
 
         df_out_cdd = pd.DataFrame({'Year': year_lst, 'Indice_cdd': cdd_lst})
@@ -789,74 +709,75 @@ class   ETCCDI_precip_in_situ:
 
         print("**************************")
         print(f"✅ Índice CDD ejecutado exitosamente. Archivo guardado: {archivo_salida}")
-        print("**************************")    
+        print("**************************")
     
 
 
-    def cwd(archivo_entrada:str, archivo_salida:str): 
+    def cwd(archivo_entrada: str, archivo_salida: str, aplicar_criterio_climpact: bool = True):
         """
         Índice climático:   CWD [Días consecutivos con precipitación]
         Definición:         Número máximo de días consecutivos con PR >= 1 mm al año.
-        Unidades:           días            
-        
-        archivo_entrada: Ruta del archivo .txt de la estación 
-                   
-        Formato del archivo de texto de la estación             
-        Columnas: Año, Mes, Día, PR, TX, TN 
-                              
-                    1901    1          1          -99.9    -3.1      -6.8
-                    1901    1          2          -99.9    -1.3      -3.6
-                    1901    1          3          -99.9    -0.5      -7.9
-                    1901    1          4          -99.9    -1.0      -9.1
-                    1901    1          5          -99.9    -1.8      -8.4     
+        Unidades:           días
 
-        mes y día deben ser números enteros.
-        Las unidades de PR (Precipitación) son milímetros.
-        Las unidades de TX (Temperatura Máxima)/TN (Temperatura Mínima) son grados Celsius.
-   
-        archivo_salida: Ruta donde se guarda el archivo Excel (.xlsx)
+        archivo_entrada: Ruta del archivo .txt de la estación
+        archivo_salida:  Ruta donde se guarda el archivo Excel (.xlsx)
+
+        aplicar_criterio_climpact : bool
+            Si True (por defecto), aplica el criterio de completitud de Climpact:
+            - máximo 3 días faltantes por mes
+            - máximo 15 días faltantes por año
+            Si se supera → el año se marca como NaN.
 
         Notas de implementación (alineado con ETCCDI / Climpact):
-        - Se recorre la serie diaria en orden cronológico real.
+        - Se construye un calendario diario completo para cada año.
+        - Los días ausentes en el archivo se tratan como faltantes (-99.9).
         - PR >= 1 mm → día húmedo (incrementa la racha).
         - PR < 1 mm  → día seco (rompe la racha).
-        - PR < 0 o NaN (p. ej. -99.9) → valor faltante (rompe la racha).
-        - El índice es el máximo de las rachas dentro del año.
+        - PR < 0 o NaN → valor faltante (rompe la racha).
         """
-        
         df = pd.read_csv(archivo_entrada, sep=r'\s+')
         df['Date'] = pd.to_datetime(df[['Year', 'Month', 'Day']])
-        df = df.sort_values('Date').reset_index(drop=True)
+        df = df.set_index('Date').sort_index()
 
-        years = sorted(df['Year'].unique())
+        years = sorted(df.index.year.unique())
         cwd_lst = []
         year_lst = []
 
         for y in years:
-            df_year = df[df['Year'] == y]
-            if df_year.empty:
-                cwd_lst.append(np.nan)
-                year_lst.append(y)
-                continue
+            start = pd.Timestamp(year=y, month=1, day=1)
+            end   = pd.Timestamp(year=y, month=12, day=31)
+            full_idx = pd.date_range(start, end, freq='D')
+
+            s = df.loc[df.index.year == y, 'PR'].reindex(full_idx)
+
+            missing_mask = s.isna() | (s < 0)
+            n_missing = int(missing_mask.sum())
+
+            if aplicar_criterio_climpact:
+                monthly_missing = missing_mask.groupby(full_idx.month).sum()
+                if (monthly_missing > 3).any() or n_missing > 15:
+                    cwd_lst.append(np.nan)
+                    year_lst.append(y)
+                    continue
 
             max_streak = 0
             current = 0
-            for pr in df_year['PR'].values:
-                if pd.isna(pr) or pr < 0:          # faltante → interrumpe
+            for pr in s.values:
+                if pd.isna(pr) or pr < 0:
                     current = 0
-                elif pr >= 1.0:                    # día húmedo
+                elif pr >= 1.0:
                     current += 1
                     if current > max_streak:
                         max_streak = current
-                else:                              # día seco (PR < 1)
+                else:
                     current = 0
 
-            cwd_lst.append(int(max_streak))
+            cwd_lst.append(int(max_streak) if max_streak > 0 else 0)
             year_lst.append(y)
 
         df_out_cwd = pd.DataFrame({'Year': year_lst, 'Indice_cwd': cwd_lst})
         df_out_cwd.to_excel(archivo_salida, index=False)
-        
+
         print("**************************")
         print(f"✅ Índice CWD ejecutado exitosamente. Archivo guardado: {archivo_salida}")
         print("**************************")
@@ -963,410 +884,214 @@ class   ETCCDI_precip_in_situ:
 
 
 
-    def r95p(archivo_entrada:str, archivo_salida:str, base_inicio: int, base_fin: int):
+    def r95p(archivo_entrada: str, archivo_salida: str,
+             base_inicio: int, base_fin: int,
+             aplicar_criterio_climpact: bool = True):
         """
-        Índice climático:   R95p [Precipitación total anual cuando la precipitación es superior al percentil 95]
-        Definición:         Sea PRwj la cantidad de precipitación diaria en un día lluvioso
-                            w (PR ≥ 1,0 mm) en el período i y sea PRwn95 el percentil 95 de la precipitación en días lluviosos
-                            en el período base.
-                            Periodo base actual: 1991 - 2020
-                            Periodos anteriores: 1961 - 1990
-                                                 1981 - 2010
+        Índice climático:   R95p
+        Definición ETCCDI:  Suma anual de la precipitación en días húmedos (PR ≥ 1 mm)
+                            que superan el percentil 95 de los días húmedos del periodo base.
         Unidades:           mm
-             
-        archivo_entrada: Ruta del archivo .txt de la estación
-                    
-        Formato del archivo de texto de la estación             
-        Columnas: Año, Mes, Día, PR, TX, TN 
-                                  
-                    1901    1          1          -99.9    -3.1      -6.8
-                    1901    1          2          -99.9    -1.3      -3.6
-                    1901    1          3          -99.9    -0.5      -7.9
-                    1901    1          4          -99.9    -1.0      -9.1
-                    1901    1          5          -99.9    -1.8      -8.4
 
-        Mes y Día deben ser números enteros.
-        Las unidades de PR (Precipitación) son milímetros.
-        Las unidades de TX (Temperatura Máxima)/TN (Temperatura Mínima) son grados Celsius.
-        
-        archivo_salida: Ruta donde se guarda el archivo Excel (.xlsx)        
-             
-"""
+        Parámetros
+        ----------
+        archivo_entrada : str
+        archivo_salida  : str
+        base_inicio, base_fin : int   Periodo de referencia (p. ej. 1981, 2010)
+        aplicar_criterio_climpact : bool
+            Si True, años con >15 días faltantes o >3 faltantes en algún mes → NaN.
 
-        VARIABLE   = 'PR'
+        Notas
+        -----
+        - El umbral es UN solo valor (percentil 95 de todos los días húmedos del base).
+        - Para años dentro del periodo base se aplica bootstrap (Zhang et al. 2005)
+          para evitar tendencias artificiales.
+        """
+        WET_THRESH = 1.0
         PERCENTILE = 95
-        WET_THRESH = 1.0
 
-        def leap_year(y):
-            return "True" if isleap(y) else "False"
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 1. Carga y preparación
-# ─────────────────────────────────────────────────────────────────────────────
         df = pd.read_csv(archivo_entrada, sep=r'\s+')
         df['Date'] = pd.to_datetime(df[['Year', 'Month', 'Day']])
         df = df.set_index('Date').sort_index()
 
-        df_wet = df[df[VARIABLE] >= WET_THRESH][[VARIABLE]].copy()
-        bp     = df_wet[(df_wet.index.year >= base_inicio) & (df_wet.index.year <= base_fin)].copy()
+        # Solo días válidos y húmedos
+        df_wet = df[(df['PR'] >= WET_THRESH) & (df['PR'] >= 0)][['PR']].copy()
+        bp = df_wet[(df_wet.index.year >= base_inicio) &
+                    (df_wet.index.year <= base_fin)].copy()
 
-# ─────────────────────────────────────────────────────────────────────────────
-        def window_values_with_initial(source_df, m, d, years_range):
-            """
-    Replica exactamente el patrón del original:
-      1. Filtra source_df en [ancla-2, ancla+2] (ancla = primer (m,d) en source_df)
-      2. Itera sobre years_range y concatena la ventana de cada año
-    Devuelve array 1-D con todos los valores acumulados.
-    """
-            mask_md = (source_df.index.month == m) & (source_df.index.day == d)
-            if not mask_md.any():
-                return np.array([])
+        if len(bp) < 10:
+            raise ValueError(
+                f"Muy pocos días húmedos en el periodo base {base_inicio}-{base_fin}. "
+                "Revisa los datos o el periodo base."
+            )
 
-            anchor = source_df.index[mask_md][0]
-            d1_init = anchor - pd.DateOffset(days=2)
-            d2_init = anchor + pd.DateOffset(days=2)
+        # Umbral de referencia (todos los días húmedos del base)
+        threshold_ref = float(np.percentile(bp['PR'].values, PERCENTILE))
 
-    # Bloque inicial (ancla, primer año)
-            mask_init = (source_df.index >= d1_init) & (source_df.index <= d2_init)
-            parts = [source_df.loc[mask_init, VARIABLE].to_numpy(dtype=float)]
+        def _year_completeness_ok(y: int) -> bool:
+            """Criterio Climpact: ≤3 faltantes/mes y ≤15 faltantes/año."""
+            if not aplicar_criterio_climpact:
+                return True
+            start = pd.Timestamp(year=y, month=1, day=1)
+            end   = pd.Timestamp(year=y, month=12, day=31)
+            full  = pd.date_range(start, end, freq='D')
+            s = df.loc[df.index.year == y, 'PR'].reindex(full)
+            missing = s.isna() | (s < 0)
+            if missing.sum() > 15:
+                return False
+            monthly = missing.groupby(full.month).sum()
+            return not (monthly > 3).any()
 
-    # Loop sobre los años del rango
-            for yr in years_range:
-                try:
-                    d1 = d1_init.replace(year=yr)
-                    d2 = d1 + pd.DateOffset(days=4)
-                    mask = (source_df.index >= d1) & (source_df.index <= d2)
-                    arr = source_df.loc[mask, VARIABLE].to_numpy(dtype=float)
-                    if len(arr) > 0:
-                        parts.append(arr)
-                except Exception:
-                    pass  # e.g. feb-29 en año no bisiesto
+        def _r95p_one_year(yr_wet: pd.DataFrame, thresh: float) -> float:
+            """Suma de precipitación de días húmedos que superan el umbral."""
+            if yr_wet.empty:
+                return 0.0
+            exceed = yr_wet.loc[yr_wet['PR'] > thresh, 'PR']
+            return float(exceed.sum()) if len(exceed) else 0.0
 
-            return np.concatenate(parts) if parts else np.array([])
+        years_all = sorted(df.index.year.unique())
+        results = {}
 
-        def build_r95p(source_df, years_range_func):
-            """
-    Construye la lista r95p igual que el original:
-    itera m=1..12, d=1..32, solo añade entrada cuando d existe como día húmedo.
-    years_range_func(source_df) → el rango de años para el loop.
-    """
-            r95p_list = []
-            first = source_df.index.year.unique()[0]
-            last  = source_df.index.year.unique()[-1]
+        # Años FUERA del periodo base → umbral fijo
+        for y in years_all:
+            if base_inicio <= y <= base_fin:
+                continue
+            if not _year_completeness_ok(y):
+                results[y] = np.nan
+                continue
+            yr_wet = df_wet[df_wet.index.year == y]
+            results[y] = round(_r95p_one_year(yr_wet, threshold_ref), 1)
 
-            for m in range(1, 13):
-                df_month = source_df[source_df.index.month == m]
-                for d in range(1, 32):
-                    if d not in df_month.index.day:
-                        continue
-
-                    if m == 2 and d == 29:
-                # Caso feb-29: loop while t < last_base desde primer bisiesto
-                # → reproducimos con la lista de años bisiestos en [first, last)
-                        leap_years = [y for y in range(first, last) if isleap(y)]
-                        vals = window_values_with_initial(source_df, m, d, leap_years[1:] if leap_years else [])
-                # El original comienza con t=primer_bisiesto y hace t+=4 mientras t<1990
-                # → lo reproducimos con los bisiestos a partir del segundo
-                    elif m == 12 and d in [30, 31]:
-                        yr_range = range(first + 1, last + 1)
-                        vals = window_values_with_initial(source_df, m, d, yr_range)
-                    elif m == 1 and d in [1, 2]:
-                        yr_range = range(first, last)
-                        vals = window_values_with_initial(source_df, m, d, yr_range)
-                    else:
-                        yr_range = range(first, last)   # ← EXCLUYE last, igual que el original
-                        vals = window_values_with_initial(source_df, m, d, yr_range)
-
-                    if len(vals) > 0:
-                        r95p_list.append(float(np.percentile(vals, PERCENTILE)))
-
-            return r95p_list
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 3. Percentil de referencia (para años fuera del período base)
-# ─────────────────────────────────────────────────────────────────────────────
-  #      print("Calculando el percentil de referencia del período base...")
-        r95p = build_r95p(bp, None)
-  #      print(f"  → {len(r95p)} entradas en r95p")
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 4. Helper: calcular R95p de un año dado r95p como lista
-#    Reproduce exactamente el original: itera días húmedos, compara con r95p[doy-1]
-# ─────────────────────────────────────────────────────────────────────────────
-        def calc_r95p_year(df_year, pct_list, is_leap):
-            pct_use = pct_list if is_leap else (pct_list[:59] + pct_list[60:])
-            count = 0.0
-            for ts in df_year.index:
-                doy = ts.dayofyear
-                val = float(df_year.loc[ts, VARIABLE])
-                idx = doy - 1
-            if idx < len(pct_use) and val > pct_use[idx]:
-                count += val
-            return count
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 5. Índice para años fuera del período base
-# ─────────────────────────────────────────────────────────────────────────────
-        df_out   = pd.concat([df_wet[df_wet.index.year < base_inicio],
-                      df_wet[df_wet.index.year > base_fin]])
-        out_years, out_values = [], []
-
- #       print(f"Calculando R95p para {len(df_out.index.year.unique())} años fuera del período base...")
-        for yr in sorted(df_out.index.year.unique()):
-            yr_data = df_out[df_out.index.year == yr]
-            out_values.append(calc_r95p_year(yr_data, r95p, leap_year(yr) == "True"))
-            out_years.append(yr)
-
-        df_output_out = pd.DataFrame({"Date": out_years, "R95p (mm)": out_values})
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 6. Bootstrap para años del período base
-#    Reproduce exactamente el original: para cada año o, itera sobre los 29
-#    años restantes, construye df_bootstrap = año_p duplicado + boot (29 años),
-#    calcula r95p_bootstrap con build_r95p, evalúa el año o y promedia.
-# ─────────────────────────────────────────────────────────────────────────────
-        base_year_lst, index_base_list = [], []
+        # Años DENTRO del periodo base → bootstrap
         bp_years = sorted(bp.index.year.unique())
+        for o in bp_years:
+            if not _year_completeness_ok(o):
+                results[o] = np.nan
+                continue
+            # 29 umbrales dejando fuera el año o (y duplicando otro)
+            boot_vals = []
+            others = [yy for yy in bp_years if yy != o]
+            for p in others:
+                # periodo bootstrap = (base sin o) + año p duplicado
+                boot_df = pd.concat([
+                    bp[bp.index.year != o],
+                    bp[bp.index.year == p]
+                ])
+                thr = float(np.percentile(boot_df['PR'].values, PERCENTILE))
+                yr_o = bp[bp.index.year == o]
+                boot_vals.append(_r95p_one_year(yr_o, thr))
+            results[o] = round(float(np.mean(boot_vals)), 1) if boot_vals else 0.0
 
-#print(f"Bootstrap para {len(bp_years)} años del período base...")
-        for idx_o, o in enumerate(bp_years):
-            df_boot    = bp[bp.index.year != o]
-            iter_years = sorted(df_boot.index.year.unique())   # 29 años
-            index_lst  = []
+        # Ordenar y exportar
+        out_years = sorted(results.keys())
+        df_out = pd.DataFrame({
+            'Date': out_years,
+            'R95p (mm)': [results[y] for y in out_years]
+        })
+        df_out.to_excel(archivo_salida, index=False)
 
-            for p in iter_years:
-        # df_bootstrap = año p + los 29 restantes (30 años total, con p duplicado)
-                df_bootstrap = pd.concat([df_boot[df_boot.index.year == p], df_boot])
-                df_bootstrap = df_bootstrap.sort_index()
+        print("**************************")
+        print(f"✅ Índice R95p ejecutado exitosamente. Archivo guardado: {archivo_salida}")
+        print(f"   Umbral 95p del periodo base {base_inicio}-{base_fin}: {threshold_ref:.2f} mm")
+        print("**************************")
 
-                r95p_bootstrap = build_r95p(df_bootstrap, None)
-
-                df_o    = bp[bp.index.year == o]
-                counter = calc_r95p_year(df_o, r95p_bootstrap, leap_year(o) == "True")
-                index_lst.append(counter)
-
-            base_year_lst.append(o)
-            index_base_list.append(float(np.mean(index_lst)))
- #   print(f"  [{idx_o+1:2d}/{len(bp_years)}] Año {o} → R95p = {index_base_list[-1]:.2f} mm")
-
-        df_output_base = pd.DataFrame({"Date": base_year_lst, "R95p (mm)": index_base_list})
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 7. Unir y exportar
-# ─────────────────────────────────────────────────────────────────────────────
-        df_output = (pd.concat([df_output_base, df_output_out])
-               .sort_values(by="Date")
-               .reset_index(drop=True))
-
-        df_output.to_excel(archivo_salida, index=False)
-        
-        print("**************************")   
-        print(f"\n✅ Índice R95p ejecutado exitosamente. Archivo guardado: {archivo_salida}")
-        print("**************************")   
-
-
-
-    def r99p(archivo_entrada:str, archivo_salida:str, base_inicio: int, base_fin: int):
+    def r99p(archivo_entrada: str, archivo_salida: str,
+             base_inicio: int, base_fin: int,
+             aplicar_criterio_climpact: bool = True):
         """
-        Índice climático: R99p [Precipitación total anual (PRCP) cuando PR > percentil 99]
-        Definición:  Sea PRwj la cantidad de precipitación diaria en un día lluvioso
-             w (PR ≥ 1,0 mm) en el período i y sea PRwn99 el percentil 99 de la precipitación en días lluviosos
-             en el período de referencia.
-                             Periodo base actual: 1991-2020
-                             Periodos anteriores: 1981-2010
-                                                  1961-1990
-    
+        Índice climático:   R99p
+        Definición ETCCDI:  Suma anual de la precipitación en días húmedos (PR ≥ 1 mm)
+                            que superan el percentil 99 de los días húmedos del periodo base.
         Unidades:           mm
-             
-        archivo_entrada: Ruta del archivo .txt de la estación
-                    
-        Formato del archivo de texto de la estación             
-        Columnas: Año, Mes, Día, PR, TX, TN 
-                                  
-                    1901    1          1          -99.9    -3.1      -6.8
-                    1901    1          2          -99.9    -1.3      -3.6
-                    1901    1          3          -99.9    -0.5      -7.9
-                    1901    1          4          -99.9    -1.0      -9.1
-                    1901    1          5          -99.9    -1.8      -8.4
 
-        Mes y Día deben ser números enteros.
-        Las unidades de PR (Precipitación) son milímetros.
-        Las unidades de TX (Temperatura Máxima)/TN (Temperatura Mínima) son grados Celsius.
-        
-        archivo_salida: Ruta donde se guarda el archivo Excel (.xlsx)      
-    
-"""
+        Parámetros
+        ----------
+        archivo_entrada : str
+        archivo_salida  : str
+        base_inicio, base_fin : int   Periodo de referencia (p. ej. 1981, 2010)
+        aplicar_criterio_climpact : bool
+            Si True, años con >15 días faltantes o >3 faltantes en algún mes → NaN.
 
-
-        VARIABLE   = 'PR'
-        PERCENTILE = 99
+        Notas
+        -----
+        - El umbral es UN solo valor (percentil 99 de todos los días húmedos del base).
+        - Para años dentro del periodo base se aplica bootstrap (Zhang et al. 2005).
+        """
         WET_THRESH = 1.0
+        PERCENTILE = 99
 
-        def leap_year(y):
-            return "True" if isleap(y) else "False"
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 1. Carga y preparación
-# ─────────────────────────────────────────────────────────────────────────────
         df = pd.read_csv(archivo_entrada, sep=r'\s+')
         df['Date'] = pd.to_datetime(df[['Year', 'Month', 'Day']])
         df = df.set_index('Date').sort_index()
 
-        df_wet = df[df[VARIABLE] >= WET_THRESH][[VARIABLE]].copy()
-        bp     = df_wet[(df_wet.index.year >= base_inicio) & (df_wet.index.year <= base_fin)].copy()
+        df_wet = df[(df['PR'] >= WET_THRESH) & (df['PR'] >= 0)][['PR']].copy()
+        bp = df_wet[(df_wet.index.year >= base_inicio) &
+                    (df_wet.index.year <= base_fin)].copy()
 
-# ─────────────────────────────────────────────────────────────────────────────
-        def window_values_with_initial(source_df, m, d, years_range):
-            """
-    Replica exactamente el patrón del original:
-      1. Filtra source_df en [ancla-2, ancla+2] (ancla = primer (m,d) en source_df)
-      2. Itera sobre years_range y concatena la ventana de cada año
-    Devuelve array 1-D con todos los valores acumulados.
-    """
-            mask_md = (source_df.index.month == m) & (source_df.index.day == d)
-            if not mask_md.any():
-                return np.array([])
+        if len(bp) < 10:
+            raise ValueError(
+                f"Muy pocos días húmedos en el periodo base {base_inicio}-{base_fin}. "
+                "Revisa los datos o el periodo base."
+            )
 
-            anchor = source_df.index[mask_md][0]
-            d1_init = anchor - pd.DateOffset(days=2)
-            d2_init = anchor + pd.DateOffset(days=2)
+        threshold_ref = float(np.percentile(bp['PR'].values, PERCENTILE))
 
-    # Bloque inicial (ancla, primer año)
-            mask_init = (source_df.index >= d1_init) & (source_df.index <= d2_init)
-            parts = [source_df.loc[mask_init, VARIABLE].to_numpy(dtype=float)]
+        def _year_completeness_ok(y: int) -> bool:
+            if not aplicar_criterio_climpact:
+                return True
+            start = pd.Timestamp(year=y, month=1, day=1)
+            end   = pd.Timestamp(year=y, month=12, day=31)
+            full  = pd.date_range(start, end, freq='D')
+            s = df.loc[df.index.year == y, 'PR'].reindex(full)
+            missing = s.isna() | (s < 0)
+            if missing.sum() > 15:
+                return False
+            monthly = missing.groupby(full.month).sum()
+            return not (monthly > 3).any()
 
-    # Loop sobre los años del rango
-            for yr in years_range:
-                try:
-                    d1 = d1_init.replace(year=yr)
-                    d2 = d1 + pd.DateOffset(days=4)
-                    mask = (source_df.index >= d1) & (source_df.index <= d2)
-                    arr = source_df.loc[mask, VARIABLE].to_numpy(dtype=float)
-                    if len(arr) > 0:
-                        parts.append(arr)
-                except Exception:
-                    pass  # e.g. feb-29 en año no bisiesto
+        def _r99p_one_year(yr_wet: pd.DataFrame, thresh: float) -> float:
+            if yr_wet.empty:
+                return 0.0
+            exceed = yr_wet.loc[yr_wet['PR'] > thresh, 'PR']
+            return float(exceed.sum()) if len(exceed) else 0.0
 
-            return np.concatenate(parts) if parts else np.array([])
+        years_all = sorted(df.index.year.unique())
+        results = {}
 
-        def build_r99p(source_df, years_range_func):
-            """
-    Construye la lista r99p igual que el original:
-    itera m=1..12, d=1..32, solo añade entrada cuando d existe como día húmedo.
-    years_range_func(source_df) → el rango de años para el loop.
-    """
-            r99p_list = []
-            first = source_df.index.year.unique()[0]
-            last  = source_df.index.year.unique()[-1]
+        for y in years_all:
+            if base_inicio <= y <= base_fin:
+                continue
+            if not _year_completeness_ok(y):
+                results[y] = np.nan
+                continue
+            yr_wet = df_wet[df_wet.index.year == y]
+            results[y] = round(_r99p_one_year(yr_wet, threshold_ref), 1)
 
-            for m in range(1, 13):
-                df_month = source_df[source_df.index.month == m]
-                for d in range(1, 32):
-                    if d not in df_month.index.day:
-                        continue
-
-                    if m == 2 and d == 29:
-                # Caso feb-29: loop while t < last_base desde primer bisiesto
-                # → reproducimos con la lista de años bisiestos en [first, last)
-                        leap_years = [y for y in range(first, last) if isleap(y)]
-                        vals = window_values_with_initial(source_df, m, d, leap_years[1:] if leap_years else [])
-                # El original comienza con t=primer_bisiesto y hace t+=4 mientras t<1990
-                # → lo reproducimos con los bisiestos a partir del segundo
-                    elif m == 12 and d in [30, 31]:
-                        yr_range = range(first + 1, last + 1)
-                        vals = window_values_with_initial(source_df, m, d, yr_range)
-                    elif m == 1 and d in [1, 2]:
-                        yr_range = range(first, last)
-                        vals = window_values_with_initial(source_df, m, d, yr_range)
-                    else:
-                        yr_range = range(first, last)   # ← EXCLUYE last, igual que el original
-                        vals = window_values_with_initial(source_df, m, d, yr_range)
-
-                    if len(vals) > 0:
-                        r99p_list.append(float(np.percentile(vals, PERCENTILE)))
-
-            return r99p_list
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 3. Percentil de referencia (para años fuera del período base)
-# ─────────────────────────────────────────────────────────────────────────────
- #       print("Calculando el percentil de referencia del período base...")
-        r99p = build_r99p(bp, None)
-#        print(f"  → {len(r99p)} entradas en r99p")
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 4. Helper: calcular r99p de un año dado r99p como lista
-#    Reproduce exactamente el original: itera días húmedos, compara con r99p[doy-1]
-# ─────────────────────────────────────────────────────────────────────────────
-        def calc_r99p_year(df_year, pct_list, is_leap):
-            pct_use = pct_list if is_leap else (pct_list[:59] + pct_list[60:])
-            count = 0.0
-            for ts in df_year.index:
-                doy = ts.dayofyear
-                val = float(df_year.loc[ts, VARIABLE])
-                idx = doy - 1
-                if idx < len(pct_use) and val > pct_use[idx]:
-                    count += val
-            return count
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 5. Índice para años fuera del período base
-# ─────────────────────────────────────────────────────────────────────────────
-        df_out   = pd.concat([df_wet[df_wet.index.year < base_inicio],
-                      df_wet[df_wet.index.year > base_fin]])
-        out_years, out_values = [], []
-
- #       print(f"Calculando r99p para {len(df_out.index.year.unique())} años fuera del período base...")
-        for yr in sorted(df_out.index.year.unique()):
-            yr_data = df_out[df_out.index.year == yr]
-            out_values.append(calc_r99p_year(yr_data, r99p, leap_year(yr) == "True"))
-            out_years.append(yr)
-
-        df_output_out = pd.DataFrame({"Date": out_years, "r99p (mm)": out_values})
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 6. Bootstrap para años del período base
-#    Reproduce exactamente el original: para cada año o, itera sobre los 29
-#    años restantes, construye df_bootstrap = año_p duplicado + boot (29 años),
-#    calcula r99p_bootstrap con build_r99p, evalúa el año o y promedia.
-# ─────────────────────────────────────────────────────────────────────────────
-        base_year_lst, index_base_list = [], []
         bp_years = sorted(bp.index.year.unique())
+        for o in bp_years:
+            if not _year_completeness_ok(o):
+                results[o] = np.nan
+                continue
+            boot_vals = []
+            others = [yy for yy in bp_years if yy != o]
+            for p in others:
+                boot_df = pd.concat([
+                    bp[bp.index.year != o],
+                    bp[bp.index.year == p]
+                ])
+                thr = float(np.percentile(boot_df['PR'].values, PERCENTILE))
+                yr_o = bp[bp.index.year == o]
+                boot_vals.append(_r99p_one_year(yr_o, thr))
+            results[o] = round(float(np.mean(boot_vals)), 1) if boot_vals else 0.0
 
-#print(f"Bootstrap para {len(bp_years)} años del período base...")
-        for idx_o, o in enumerate(bp_years):
-            df_boot    = bp[bp.index.year != o]
-            iter_years = sorted(df_boot.index.year.unique())   # 29 años
-            index_lst  = []
+        out_years = sorted(results.keys())
+        df_out = pd.DataFrame({
+            'Date': out_years,
+            'R99p (mm)': [results[y] for y in out_years]
+        })
+        df_out.to_excel(archivo_salida, index=False)
 
-            for p in iter_years:
-        # df_bootstrap = año p + los 29 restantes (30 años total, con p duplicado)
-                df_bootstrap = pd.concat([df_boot[df_boot.index.year == p], df_boot])
-                df_bootstrap = df_bootstrap.sort_index()
-
-                r99p_bootstrap = build_r99p(df_bootstrap, None)
-
-                df_o    = bp[bp.index.year == o]
-                counter = calc_r99p_year(df_o, r99p_bootstrap, leap_year(o) == "True")
-                index_lst.append(counter)
-
-            base_year_lst.append(o)
-            index_base_list.append(float(np.mean(index_lst)))
- #   print(f"  [{idx_o+1:2d}/{len(bp_years)}] Año {o} → r99p = {index_base_list[-1]:.2f} mm")
-
-        df_output_base = pd.DataFrame({"Date": base_year_lst, "r99p (mm)": index_base_list})
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 7. Unir y exportar
-# ─────────────────────────────────────────────────────────────────────────────
-        df_output = (pd.concat([df_output_base, df_output_out])
-               .sort_values(by="Date")
-               .reset_index(drop=True))
-
-        df_output.to_excel(archivo_salida, index=False)
-        
-        print("**************************")   
-        print(f"\n ✅ Índice R99p ejecutado exitosamente. Archivo guardado: {archivo_salida}")
-        print("**************************")   
+        print("**************************")
+        print(f"✅ Índice R99p ejecutado exitosamente. Archivo guardado: {archivo_salida}")
+        print(f"   Umbral 99p del periodo base {base_inicio}-{base_fin}: {threshold_ref:.2f} mm")
+        print("**************************")
