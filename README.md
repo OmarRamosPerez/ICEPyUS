@@ -8,7 +8,7 @@ Paquete en Python para calcular y graficar índices climáticos de precipitació
 <br><br>
 
 # Versión:
-1.0
+3.0
 <br><br>
 
 
@@ -24,7 +24,7 @@ Puedes instalar ICEPyUS en Linux, Windows u otros sistemas utilizando los siguie
 <br><br>
 **Usando pip** (recomendado):
 ```
-pip install icepyus
+pip install --upgrade icepyus
 
 ```
 
