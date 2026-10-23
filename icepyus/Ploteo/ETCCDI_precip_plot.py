@@ -187,7 +187,7 @@ def calculate_mean_no_zeros(data_array):
     return np.nan
 
 
-class ETCCDI_plot_in_situ:
+class ETCCDI_precip_plot_in_situ:
 
     def plot(archivo_excel: str, salida_figura: str, salida_excel: str = None, titulo: str = None):
 
@@ -651,7 +651,7 @@ def guardar_resultados(lats, lons, tau_map, pval_map, pend_map,
     print(f"✅  NetCDF de resultados guardado: {archivo_salida}")
 
 
-class ETCCDI_plot_malla:
+class ETCCDI_precip_plot_malla:
 
     def Plot_netcdf_1_tiempo(Archivo_NETCDF, OUTPUT_FIG, color_scale, center_cmap=False, levels=None, set_global=False, ax=None, titulo: str = None):
         import cartopy.crs as ccrs
