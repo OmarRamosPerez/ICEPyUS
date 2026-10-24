@@ -1,4 +1,4 @@
-# ICEPyUS (Índices Climáticos ETCCDI Precipitación en Python de la Universidad de Sonora)
+# ICEPyUS (Índices Climáticos ETCCDI en Python de la Universidad de Sonora)
 
 [![Static Badge](https://img.shields.io/badge/pypi-3.4.4-brightgreen)](https://pypi.org/project/ICEPyUS/) 
 
