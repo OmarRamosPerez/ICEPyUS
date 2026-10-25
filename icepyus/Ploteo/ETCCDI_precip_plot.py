@@ -24,13 +24,13 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 #  DICCIONARIO DE UNIDADES Y FORMATEO DE ETIQUETAS
 # ════════════════════════════════════════════════════════════
 UNIDADES_ETCCDI = {
-    'rx1day': 'mm', 'rx5day': 'mm', 'r10mm': 'días', 'r20mm': 'días',
-    'cdd': 'días', 'cwd': 'días', 'prcptot': 'mm', 'sdii': 'mm/day',
+    'rx1day': 'mm', 'rx5day': 'mm', 'r10mm': 'days', 'r20mm': 'days',
+    'cdd': 'days', 'cwd': 'days', 'prcptot': 'mm', 'sdii': 'mm/day',
     'r95p': 'mm', 'r99p': 'mm',
     'tn90p': '% of days', 'tx90p': '% of days',
     'tn10p': '% of days', 'tx10p': '% of days',
     'tnn': '°C', 'tnx': '°C', 'txn': '°C', 'txx': '°C',
-    'dtr': '°C', 'fd': 'días', 'id': 'días', 'su': 'días', 'tr': 'días'
+    'dtr': '°C', 'fd': 'days', 'id': 'days', 'su': 'days', 'tr': 'days'
 }
 
 def obtener_ylabel(nombre_variable):
@@ -54,7 +54,7 @@ def unidad_pendiente(nombre_variable):
     if any(k in nombre_lower for k in ['tn90p', 'tx90p', 'tn10p', 'tx10p']):
         return '% of days / year'
     if any(k in nombre_lower for k in ['r10mm', 'r20mm', 'cdd', 'cwd', 'fd', 'id', 'su', 'tr']):
-        return 'días/year'
+        return 'days/year'
     if any(k in nombre_lower for k in ['tnn', 'tnx', 'txn', 'txx', 'dtr']):
         return '°C/year'
     if any(k in nombre_lower for k in ['rx1day', 'rx5day', 'prcptot', 'r95p', 'r99p']):
