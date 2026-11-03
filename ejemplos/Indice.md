@@ -53,7 +53,7 @@ Para los ejemplos de procesamiento y graficamiento.
     
 ## Malla
 - Frecuencia <!--[Ejemplos](Indices_frecuencia_malla.ipynb)-->
-- Absolutos <!--[Ejemplos]() -->
+- Absolutos [Ejemplos](Indices_Absolutos_Malla.ipynb)
 - Duración [Ejemplos](Indices_Duracion_Malla.ipynb)
 - Básicos  <!--[Ejemplos]() -->
 - Percentiles <!--[Ejemplos](Indices_percentiles_malla.ipynb) -->
@@ -71,7 +71,7 @@ Para los ejemplos de procesamiento y graficamiento.
 # Graficamiento de datos -
  Malla
 - Frecuencia <!--[Ejemplos](Indices_frecuencia_ploteo_malla.ipynb) -->
-- Absolutos <!--[Ejemplos]() -->
+- Absolutos [Ejemplos](Indices_Absolutos_Malla_Plot.ipynb)
 - Duración [Ejemplos](Indices_Duracion_Malla_Plot.ipynb)
 - Básicos <!--[Ejemplos]() -->
 - Percentiles <!--[Ejemplos](Indices_percentiles_ploteo_malla.ipynb) -->
