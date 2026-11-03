@@ -55,7 +55,7 @@ Para los ejemplos de procesamiento y graficamiento.
 - Frecuencia <!--[Ejemplos](Indices_frecuencia_malla.ipynb)-->
 - Absolutos [Ejemplos](Indices_Absolutos_Malla.ipynb)
 - Duración [Ejemplos](Indices_Duracion_Malla.ipynb)
-- Básicos  <!--[Ejemplos]() -->
+- Básicos  [Ejemplos](Indices_Basicos_Malla.ipynb)
 - Percentiles <!--[Ejemplos](Indices_percentiles_malla.ipynb) -->
 
   
@@ -63,7 +63,7 @@ Para los ejemplos de procesamiento y graficamiento.
 - Frecuencia <!--[Ejemplos](Indices_frecuencia_in_situ.ipynb) -->
 - Duración [Ejemplos](Indices_Duracion_In_Situ.ipynb)
 - Absolutos [Ejemplos](Indices_Absolutos_In_Situ.ipynb)
-- Básicos  <!--[Ejemplos]() -->
+- Básicos   [Ejemplos](Indices_Basicos_In_Situ.ipynb)
 - Percentiles <!--[Ejemplos](Indices_percentiles_in_situ.ipynb) -->
 
 
@@ -73,14 +73,14 @@ Para los ejemplos de procesamiento y graficamiento.
 - Frecuencia <!--[Ejemplos](Indices_frecuencia_ploteo_malla.ipynb) -->
 - Absolutos [Ejemplos](Indices_Absolutos_Malla_Plot.ipynb)
 - Duración [Ejemplos](Indices_Duracion_Malla_Plot.ipynb)
-- Básicos <!--[Ejemplos]() -->
+- Básicos [Ejemplos](Indices_Basicos_Malla_Plot.ipynb)
 - Percentiles <!--[Ejemplos](Indices_percentiles_ploteo_malla.ipynb) -->
       
 # In Situ
 - Frecuencia <!--[Ejemplos](Indices_frecuencia_ploteo_in_situ.ipynb) -->
 - Absolutos [Ejemplos](Indices_Absolutos_In_Situ_Plot.ipynb)
 - Duración [Ejemplos](Indices_Duracion_In_Situ_Plot.ipynb)
-- Básicos <!--[Ejemplos]() --> 
+- Básicos [Ejemplos](Indices_Basicos_In_Situ_Plot.ipynb)
 - Percentiles <!--[Ejemplos](Indices_percentiles_ploteo_in_situ.ipynb) -->
 
 
