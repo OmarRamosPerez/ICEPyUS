@@ -44,9 +44,9 @@ El paquete `ETCCDI_precipitacion` contiene **dos módulos principales**:
 <br><br>
 # Datos
 
-Para los ejemplos de procesamiento y graficamiento. 
+Para los ejemplos de procesamiento. 
 
-<!-- Los datos se pueden descargar de [Google Drive](https://drive.google.com/drive/folders/1zQotdaKFL3T5ik-g8XgVgNiNfvbWxYvJ?usp=drive_link)-->
+Los datos se pueden descargar de [Google Drive](https://drive.google.com/drive/folders/1wbFDAn4ynhvvTR0ZgC6kDK7mfvIKsHIN?usp=drive_link)
 
 <br><br>
 # Procesamiento de datos -
@@ -70,18 +70,18 @@ Para los ejemplos de procesamiento y graficamiento.
 <br><br>
 # Graficamiento de datos -
  Malla
-- Frecuencia <!--[Ejemplos](Indices_frecuencia_ploteo_malla.ipynb) -->
+- Frecuencia [Ejemplos](Indices_Frecuencia_Malla_Plot.ipynb)
 - Absolutos [Ejemplos](Indices_Absolutos_Malla_Plot.ipynb)
 - Duración [Ejemplos](Indices_Duracion_Malla_Plot.ipynb)
 - Básicos [Ejemplos](Indices_Basicos_Malla_Plot.ipynb)
-- Percentiles <!--[Ejemplos](Indices_percentiles_ploteo_malla.ipynb) -->
+- Percentiles [Ejemplos](Indices_Percentiles_Malla_Ploteo.ipynb)
       
 # In Situ
-- Frecuencia <!--[Ejemplos](Indices_frecuencia_ploteo_in_situ.ipynb) -->
+- Frecuencia [Ejemplos](Indices_frecuencia_In_Situ_Plot.ipynb)
 - Absolutos [Ejemplos](Indices_Absolutos_In_Situ_Plot.ipynb)
 - Duración [Ejemplos](Indices_Duracion_In_Situ_Plot.ipynb)
 - Básicos [Ejemplos](Indices_Basicos_In_Situ_Plot.ipynb)
-- Percentiles <!--[Ejemplos](Indices_percentiles_ploteo_in_situ.ipynb) -->
+- Percentiles [Ejemplos](Indices_percentiles_In_Situ_Plot.ipynb)
 
 
 
