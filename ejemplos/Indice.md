@@ -74,14 +74,14 @@ Los datos se pueden descargar de [Google Drive](https://drive.google.com/drive/f
 - Absolutos [Ejemplos](Indices_Absolutos_Malla_Plot.ipynb)
 - Duración [Ejemplos](Indices_Duracion_Malla_Plot.ipynb)
 - Básicos [Ejemplos](Indices_Basicos_Malla_Plot.ipynb)
-- Percentiles [Ejemplos](Indices_Percentiles_Malla_Ploteo.ipynb)
+- Percentiles [Ejemplos](Indices_Percentiles_Malla_Plot.ipynb)
       
 # In Situ
-- Frecuencia [Ejemplos](Indices_frecuencia_In_Situ_Plot.ipynb)
+- Frecuencia [Ejemplos](Indices_Frecuencia_In_Situ_Plot.ipynb)
 - Absolutos [Ejemplos](Indices_Absolutos_In_Situ_Plot.ipynb)
 - Duración [Ejemplos](Indices_Duracion_In_Situ_Plot.ipynb)
 - Básicos [Ejemplos](Indices_Basicos_In_Situ_Plot.ipynb)
-- Percentiles [Ejemplos](Indices_percentiles_In_Situ_Plot.ipynb)
+- Percentiles [Ejemplos](Indices_Percentiles_In_Situ_Plot.ipynb)
 
 
 
