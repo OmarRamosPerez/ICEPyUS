@@ -52,19 +52,19 @@ Para los ejemplos de procesamiento y graficamiento.
 # Procesamiento de datos -
     
 ## Malla
-- Frecuencia <!--[Ejemplos](Indices_frecuencia_malla.ipynb)-->
+- Frecuencia [Ejemplos](Indices_Frecuencia_Malla.ipynb)
 - Absolutos [Ejemplos](Indices_Absolutos_Malla.ipynb)
 - Duración [Ejemplos](Indices_Duracion_Malla.ipynb)
 - Básicos  [Ejemplos](Indices_Basicos_Malla.ipynb)
-- Percentiles <!--[Ejemplos](Indices_percentiles_malla.ipynb) -->
+- Percentiles [Ejemplos](Indices_Percentiles_Malla.ipynb)
 
   
 ## In Situ
-- Frecuencia <!--[Ejemplos](Indices_frecuencia_in_situ.ipynb) -->
+- Frecuencia [Ejemplos](Indices_Frecuencia_In_Situ.ipynb)
 - Duración [Ejemplos](Indices_Duracion_In_Situ.ipynb)
 - Absolutos [Ejemplos](Indices_Absolutos_In_Situ.ipynb)
 - Básicos   [Ejemplos](Indices_Basicos_In_Situ.ipynb)
-- Percentiles <!--[Ejemplos](Indices_percentiles_in_situ.ipynb) -->
+- Percentiles [Ejemplos](Indices_Percentiles_In_Situ.ipynb)
 
 
 <br><br>
